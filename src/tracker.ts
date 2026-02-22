@@ -39,7 +39,7 @@ export interface Campaign {
   metricsHistory?: MetricsSnapshot[];
   tweetId?: string;
   contentHash?: string;
-  status: "executed" | "failed" | "pending_metrics";
+  status: "executed" | "failed" | "live";
   lastMetricsCheck?: number;
 }
 
@@ -160,7 +160,7 @@ export class Tracker {
       }
 
       campaign.metrics = { ...campaign.metrics, ...metrics };
-      campaign.status = "pending_metrics";
+      campaign.status = "live";
       campaign.lastMetricsCheck = Date.now();
       this.save();
     }
@@ -168,20 +168,32 @@ export class Tracker {
 
   /**
    * Get campaigns that need metrics updates.
-   * Returns campaigns from last 7 days that haven't been checked in 6+ hours.
+   * Recent tweets (< 1 hour): check every cycle
+   * Older tweets (< 24 hours): check every 10 minutes
+   * Old tweets (< 7 days): check every hour
    */
   getCampaignsNeedingMetricsUpdate(maxResults: number = 10): Campaign[] {
-    const sevenDaysAgo = Date.now() - 7 * 86400000;
-    const sixHoursAgo = Date.now() - 6 * 3600000;
+    const now = Date.now();
+    const oneHourAgo = now - 3600000;
+    const oneDayAgo = now - 86400000;
+    const sevenDaysAgo = now - 7 * 86400000;
 
     return this.campaigns
-      .filter(
-        (c) =>
-          c.tweetId &&
-          c.status !== "failed" &&
-          c.timestamp > sevenDaysAgo &&
-          (!c.lastMetricsCheck || c.lastMetricsCheck < sixHoursAgo)
-      )
+      .filter((c) => {
+        if (!c.tweetId || c.status === "failed") return false;
+        if (c.timestamp < sevenDaysAgo) return false;
+
+        const lastCheck = c.lastMetricsCheck || 0;
+
+        // Recent tweets (< 1 hour old): check every cycle
+        if (c.timestamp > oneHourAgo) return true;
+
+        // Medium tweets (< 24 hours old): check every 10 minutes
+        if (c.timestamp > oneDayAgo) return now - lastCheck > 600000;
+
+        // Older tweets (< 7 days): check every hour
+        return now - lastCheck > 3600000;
+      })
       .slice(-maxResults);
   }
 

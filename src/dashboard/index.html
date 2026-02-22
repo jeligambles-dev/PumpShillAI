@@ -596,7 +596,7 @@
       if(!campaigns.length){el.innerHTML='<div class="text-center py-12 text-gray-600 text-sm">No campaigns yet</div>';return}
       el.innerHTML=campaigns.map(c=>{
         const cfg=CFG[c.action]||CFG.custom;
-        const sc=c.status==='executed'?'bg-lime-500/10 text-lime-400':c.status==='failed'?'bg-red-500/10 text-red-400':'bg-yellow-500/10 text-yellow-400';
+        const sc=c.status==='executed'?'bg-lime-500/10 text-lime-400':c.status==='live'?'bg-blue-500/10 text-blue-400':c.status==='failed'?'bg-red-500/10 text-red-400':'bg-yellow-500/10 text-yellow-400';
         const content=c.action==='thread'?c.content.split('|||')[0].trim():c.content;
 
         let links='';
