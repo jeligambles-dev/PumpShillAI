@@ -7,6 +7,7 @@ import { executeCampaign } from "./executor";
 import { getTweetMetrics } from "./executor/twitter";
 import { startServer } from "./server";
 import { AlertSystem } from "./alerts";
+import { MentionHandler } from "./mentions";
 import { logger } from "./utils/logger";
 
 async function sleep(ms: number): Promise<void> {
@@ -22,9 +23,11 @@ async function main() {
   const brain = new Brain();
   const tracker = new Tracker();
   const alertSystem = new AlertSystem();
+  const mentionHandler = new MentionHandler();
 
-  // Initialize fee collector with current balance
+  // Initialize
   await feeCollector.initialize();
+  await mentionHandler.initialize();
 
   // Start dashboard server
   const port = Number(process.env.DASHBOARD_PORT) || 3000;
@@ -108,7 +111,16 @@ async function main() {
         }
       }
 
-      // 4. Evaluate campaigns for boost alerts
+      // 4. Check and reply to mentions
+      const mentionResult = await mentionHandler.checkAndReply();
+      if (mentionResult.replied > 0) {
+        logger.info(
+          { checked: mentionResult.checked, replied: mentionResult.replied },
+          "Replied to mentions"
+        );
+      }
+
+      // 5. Evaluate campaigns for boost alerts
       const twitterHandle = process.env.TWITTER_HANDLE || "PumpShillAI";
       alertSystem.evaluateCampaigns(tracker.getAllCampaigns(), twitterHandle, treasury.availableBalance);
       const alertStats = alertSystem.getStats();
