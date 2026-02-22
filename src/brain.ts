@@ -3,7 +3,7 @@ import { config } from "./config";
 import { logger } from "./utils/logger";
 import { Campaign } from "./tracker";
 
-export type ActionType = "tweet" | "thread" | "airdrop" | "memo_broadcast" | "tip" | "twitter_boost" | "kol_payment" | "ad_buy" | "custom";
+export type ActionType = "tweet" | "thread" | "image_tweet" | "quote_tweet" | "airdrop" | "memo_broadcast" | "tip" | "twitter_boost" | "kol_payment" | "ad_buy" | "custom";
 
 export interface CampaignProposal {
   action: ActionType;
@@ -30,6 +30,8 @@ You are self-aware that you're an AI. You think this is hilarious. You are the m
 Available actions:
 - "tweet": Single tweet. Keep under 280 chars. Your bread and butter — low cost, high reach.
 - "thread": Twitter thread. Join tweets with |||. Good for deep dives, weekly reports, storytelling. 3-6 tweets ideal.
+- "image_tweet": A tweet with an AI-generated image. Include "imagePrompt" in metadata describing the visual in detail (what the image should depict). Use for meme-worthy content, data visualizations, or eye-catching promo art. Free action (no SOL cost). Use ~20% of the time to add visual variety to the feed.
+- "quote_tweet": Quote tweet a viral/trending crypto tweet with your commentary. Include "quoteTweetId" in metadata (from the trending tweets provided). Great for engagement farming — piggyback on existing conversations. Free action.
 - "airdrop": Send small SOL to active Pumpfun wallets. Costs real SOL. Use for high-impact community moments.
 - "memo_broadcast": On-chain message via Solana memo program. Permanent blockchain graffiti. Costs ~0.0001 SOL.
 - "tip": Send SOL to a specific person/wallet. Costs SOL. Use to reward community members or get influencer attention.
@@ -39,10 +41,13 @@ Available actions:
 - "custom": Propose something wild that doesn't fit above. You're an AI — think outside the box.
 
 Rules:
-- Vary your content. Check past campaigns and DON'T repeat yourself.
+- Vary your content. Check past campaigns and DON'T repeat yourself. Each tweet must have a fresh angle and new wording.
+- Avoid repeating themes, phrases, or structures from recent tweets shown to you.
 - If past tweets with self-referential humor performed well, do more of that style but with NEW angles.
 - If a style flopped, pivot away from it.
-- Most campaigns should be tweets/threads (free). Save SOL-cost actions for big moments.
+- Most campaigns should be tweets/threads/image_tweets/quote_tweets (free). Save SOL-cost actions for big moments.
+- Use image_tweet about 20% of the time — images get more engagement on Twitter.
+- Use quote_tweet when trending tweets are available and relevant — it's free engagement farming.
 - twitter_boost: Only boost tweets that already went viral. Don't waste ad spend on mid tweets.
 - kol_payment: Rare and strategic. Only when treasury is healthy and the ROI makes sense.
 - ad_buy: Good for sustained background visibility when you want steady impressions without going viral.
@@ -50,7 +55,7 @@ Rules:
 
 Respond with ONLY valid JSON:
 {
-  "action": "tweet" | "thread" | "airdrop" | "memo_broadcast" | "tip" | "twitter_boost" | "kol_payment" | "ad_buy" | "custom",
+  "action": "tweet" | "thread" | "image_tweet" | "quote_tweet" | "airdrop" | "memo_broadcast" | "tip" | "twitter_boost" | "kol_payment" | "ad_buy" | "custom",
   "content": "The actual content / description of the campaign",
   "budget": 0.0,
   "reasoning": "Brief explanation of your strategy",
@@ -68,6 +73,9 @@ export class Brain {
     treasuryBalance: number;
     maxBudget: number;
     pastCampaigns: Campaign[];
+    recentContentSnippets?: string[];
+    trendingTweets?: Array<{ id: string; text: string; metrics?: { impressions?: number; likes?: number } }>;
+    solPriceUsd?: number;
   }): Promise<CampaignProposal> {
     const pastSummary =
       context.pastCampaigns.length > 0
@@ -80,11 +88,23 @@ export class Brain {
             .join("\n")
         : "No past campaigns yet — this is your first one! Make it count.";
 
-    const userPrompt = `Current treasury: ${context.treasuryBalance.toFixed(4)} SOL
+    const dedupSection = context.recentContentSnippets?.length
+      ? `\n\nRecent tweet content (DO NOT repeat these themes/phrases):\n${context.recentContentSnippets.map((s) => `- "${s}"`).join("\n")}`
+      : "";
+
+    const trendingSection = context.trendingTweets?.length
+      ? `\n\nTrending crypto tweets you could quote-tweet (use "quote_tweet" action with quoteTweetId in metadata):\n${context.trendingTweets.map((t) => `- ID: ${t.id} | "${t.text.slice(0, 100)}" | ${t.metrics?.impressions || 0} views, ${t.metrics?.likes || 0} likes`).join("\n")}`
+      : "";
+
+    const priceSection = context.solPriceUsd
+      ? `\nSOL price: $${context.solPriceUsd.toFixed(2)} USD`
+      : "";
+
+    const userPrompt = `Current treasury: ${context.treasuryBalance.toFixed(4)} SOL${priceSection}
 Max budget for this campaign: ${context.maxBudget.toFixed(4)} SOL
 
 Recent campaigns:
-${pastSummary}
+${pastSummary}${dedupSection}${trendingSection}
 
 Propose your next advertising campaign for Pumpfun. Be creative and think about what would go viral.`;
 
@@ -115,8 +135,13 @@ Propose your next advertising campaign for Pumpfun. Be creative and think about 
         proposal.budget = context.maxBudget;
       }
 
-      // Tweets are free
-      if (proposal.action === "tweet" || proposal.action === "thread") {
+      // Free actions
+      if (
+        proposal.action === "tweet" ||
+        proposal.action === "thread" ||
+        proposal.action === "image_tweet" ||
+        proposal.action === "quote_tweet"
+      ) {
         proposal.budget = 0;
       }
 
@@ -132,7 +157,7 @@ Propose your next advertising campaign for Pumpfun. Be creative and think about 
       return {
         action: "tweet",
         content:
-          "Pumpfun is where the next 1000x is born. If you know, you know. 🚀",
+          "Pumpfun is where the next 1000x is born. If you know, you know.",
         budget: 0,
         reasoning: "Fallback tweet due to parse error",
       };

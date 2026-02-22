@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PumpShill Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter',sans-serif; background:#15161b; color:#e2e8f0; min-height:100vh; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  ::-webkit-scrollbar { width:6px; height:6px; }
+  ::-webkit-scrollbar-track { background:#15161b; }
+  ::-webkit-scrollbar-thumb { background:#2a2b38; border-radius:3px; }
+  ::-webkit-scrollbar-thumb:hover { background:#3a3b48; }
+  .card { background:#1a1b23; border:1px solid #2a2b38; border-radius:12px; }
+  .tab-btn { padding:8px 20px; border-radius:8px; font-size:14px; font-weight:500; cursor:pointer; transition:all .2s; border:none; background:transparent; color:#64748b; }
+  .tab-btn:hover { color:#94a3b8; background:rgba(255,255,255,.03); }
+  .tab-btn.active { color:#e2e8f0; background:#2a2b38; }
+  .badge { display:inline-flex; align-items:center; gap:4px; padding:2px 10px; border-radius:9999px; font-size:11px; font-weight:600; }
+  input[type="password"] { background:#15161b; border:1px solid #2a2b38; border-radius:8px; padding:10px 14px; color:#e2e8f0; font-size:14px; width:100%; outline:none; transition:border .2s; }
+  input[type="password"]:focus { border-color:#6366f1; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; padding:10px 12px; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#64748b; border-bottom:1px solid #2a2b38; font-weight:600; }
+  td { padding:10px 12px; font-size:13px; border-bottom:1px solid rgba(42,43,56,.5); }
+  tr:hover td { background:rgba(255,255,255,.01); }
+  .btn { padding:8px 18px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; border:none; }
+  .btn-primary { background:#6366f1; color:#fff; }
+  .btn-primary:hover { background:#818cf8; }
+  .btn-danger { background:#ef4444; color:#fff; }
+  .btn-danger:hover { background:#f87171; }
+  .btn-ghost { background:transparent; color:#94a3b8; border:1px solid #2a2b38; }
+  .btn-ghost:hover { background:rgba(255,255,255,.03); color:#e2e8f0; }
+  .fade-in { animation:fadeIn .3s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  .login-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; z-index:100; }
+  .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .pulse { animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+</style>
+</head>
+<body>
+
+<!-- Login Modal -->
+<div id="loginOverlay" class="login-overlay" style="display:none">
+  <div class="card p-8 w-full max-w-sm">
+    <div class="text-center mb-6">
+      <h1 class="text-2xl font-bold mb-1">PumpShill Admin</h1>
+      <p class="text-sm text-gray-500">Enter your password to continue</p>
+    </div>
+    <div class="space-y-4">
+      <input type="password" id="loginPassword" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
+      <div id="loginError" class="text-red-400 text-sm hidden"></div>
+      <button class="btn btn-primary w-full" onclick="doLogin()">Login</button>
+    </div>
+  </div>
+</div>
+
+<!-- Top Nav -->
+<nav id="topNav" class="sticky top-0 z-50 border-b border-[#2a2b38] px-6 py-3 flex items-center justify-between" style="background:rgba(21,22,27,.85);backdrop-filter:blur(12px)" hidden>
+  <div class="flex items-center gap-3">
+    <span class="text-lg font-bold">PumpShill</span>
+    <span class="text-xs text-gray-500 font-medium">Admin</span>
+  </div>
+  <div class="flex items-center gap-4">
+    <div id="solBadge" class="badge bg-[#2a2b38] text-emerald-400 mono text-xs">SOL $--</div>
+    <button class="btn btn-ghost text-xs" onclick="doLogout()">Logout</button>
+  </div>
+</nav>
+
+<!-- Main Container -->
+<div id="mainContainer" class="max-w-7xl mx-auto px-6 py-6" hidden>
+
+  <!-- Tab Navigation -->
+  <div class="flex gap-2 mb-6 overflow-x-auto pb-1">
+    <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
+    <button class="tab-btn" data-tab="campaigns" onclick="switchTab('campaigns')">Campaigns</button>
+    <button class="tab-btn" data-tab="analytics" onclick="switchTab('analytics')">Analytics</button>
+    <button class="tab-btn" data-tab="alerts" onclick="switchTab('alerts')">Alerts</button>
+    <button class="tab-btn" data-tab="scanner" onclick="switchTab('scanner')">Shill Scanner</button>
+  </div>
+
+  <!-- ======================== OVERVIEW TAB ======================== -->
+  <div id="tab-overview" class="tab-content fade-in">
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="card p-5">
+        <div class="text-xs text-gray-500 mb-1 uppercase tracking-wide font-semibold">Treasury Balance</div>
+        <div class="text-2xl font-bold text-green-400 mono" id="ov-balance">--</div>
+        <div class="text-sm text-gray-500 mono" id="ov-balance-usd">$--</div>
+      </div>
+      <div class="card p-5">
+        <div class="text-xs text-gray-500 mb-1 uppercase tracking-wide font-semibold">Total Earned</div>
+        <div class="text-2xl font-bold text-emerald-400 mono" id="ov-earned">--</div>
+        <div class="text-sm text-gray-500 mono" id="ov-earned-usd">$--</div>
+      </div>
+      <div class="card p-5">
+        <div class="text-xs text-gray-500 mb-1 uppercase tracking-wide font-semibold">Total Spent</div>
+        <div class="text-2xl font-bold text-orange-400 mono" id="ov-spent">--</div>
+        <div class="text-sm text-gray-500 mono" id="ov-spent-usd">$--</div>
+      </div>
+      <div class="card p-5">
+        <div class="text-xs text-gray-500 mb-1 uppercase tracking-wide font-semibold">Total Impressions</div>
+        <div class="text-2xl font-bold text-blue-400 mono" id="ov-impressions">--</div>
+        <div class="text-xs text-gray-500 mt-1" id="ov-campaigns-count">-- campaigns</div>
+      </div>
+    </div>
+
+    <!-- Treasury Chart -->
+    <div class="card p-5 mb-6">
+      <h3 class="text-sm font-semibold text-gray-400 mb-4">Treasury History</h3>
+      <div style="height:280px"><canvas id="treasuryChart"></canvas></div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <!-- Campaign Type Donut -->
+      <div class="card p-5">
+        <h3 class="text-sm font-semibold text-gray-400 mb-4">Campaign Types</h3>
+        <div style="height:260px;display:flex;align-items:center;justify-content:center"><canvas id="campaignDonut"></canvas></div>
+      </div>
+
+      <!-- Spending Breakdown -->
+      <div class="card p-5">
+        <h3 class="text-sm font-semibold text-gray-400 mb-4">Spending Breakdown</h3>
+        <div id="spendingSuccessRate" class="mb-4"></div>
+        <div class="overflow-x-auto">
+          <table>
+            <thead><tr><th>Action</th><th>Count</th><th>Total SOL</th><th>Avg SOL</th><th>Success%</th></tr></thead>
+            <tbody id="spendingTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Treasury Ledger -->
+    <div class="card p-5">
+      <h3 class="text-sm font-semibold text-gray-400 mb-4">Treasury Ledger</h3>
+      <div class="overflow-x-auto">
+        <table>
+          <thead><tr><th>Time</th><th>Type</th><th>Amount</th><th>Reason</th></tr></thead>
+          <tbody id="ledgerTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================== CAMPAIGNS TAB ======================== -->
+  <div id="tab-campaigns" class="tab-content fade-in" hidden>
+    <div id="campaignsList" class="space-y-3"></div>
+    <div id="campaignsEmpty" class="text-center text-gray-500 py-12" hidden>No campaigns found.</div>
+  </div>
+
+  <!-- ======================== ANALYTICS TAB ======================== -->
+  <div id="tab-analytics" class="tab-content fade-in" hidden>
+    <!-- Summary cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="card p-5">
+        <div class="text-xs text-gray-500 mb-1 uppercase tracking-wide font-semibold">Total Impressions</div>
+        <div class="text-2xl font-bold text-blue-400 mono" id="an-impressions">--</div>
+      </div>
+      <div class="card p-5">
+        <div class="text-xs text-gray-500 mb-1 uppercase tracking-wide font-semibold">Engagement Rate</div>
+        <div class="text-2xl font-bold text-emerald-400 mono" id="an-engagement">--</div>
+      </div>
+      <div class="card p-5">
+        <div class="text-xs text-gray-500 mb-1 uppercase tracking-wide font-semibold">Best Type</div>
+        <div class="text-2xl font-bold text-purple-400" id="an-best-type">--</div>
+      </div>
+      <div class="card p-5">
+        <div class="text-xs text-gray-500 mb-1 uppercase tracking-wide font-semibold">Best Hour (UTC)</div>
+        <div class="text-2xl font-bold text-orange-400 mono" id="an-best-hour">--</div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div class="card p-5">
+        <h3 class="text-sm font-semibold text-gray-400 mb-4">Avg Impressions by Type</h3>
+        <div style="height:280px"><canvas id="impressionsByTypeChart"></canvas></div>
+      </div>
+      <div class="card p-5">
+        <h3 class="text-sm font-semibold text-gray-400 mb-4">Engagement by Hour (UTC)</h3>
+        <div style="height:280px"><canvas id="engagementByHourChart"></canvas></div>
+      </div>
+    </div>
+    <div class="card p-5">
+      <h3 class="text-sm font-semibold text-gray-400 mb-4">Daily Impressions (Last 30 Days)</h3>
+      <div style="height:300px"><canvas id="dailyImpressionsChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ======================== ALERTS TAB ======================== -->
+  <div id="tab-alerts" class="tab-content fade-in" hidden>
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold">Next Posts to Boost</h3>
+      <div id="alertsBadge" class="badge bg-[#2a2b38] text-yellow-400 mono text-xs">0 queued | 0 SOL</div>
+    </div>
+    <div id="alertsList" class="space-y-3"></div>
+    <div id="alertsEmpty" class="text-center text-gray-500 py-12" hidden>No alerts in queue.</div>
+  </div>
+
+  <!-- ======================== SHILL SCANNER TAB ======================== -->
+  <div id="tab-scanner" class="tab-content fade-in" hidden>
+    <!-- Stats -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="card p-5">
+        <div class="text-xs text-gray-500 mb-1 uppercase tracking-wide font-semibold">Tweets Scanned</div>
+        <div class="text-2xl font-bold text-blue-400 mono" id="sc-scanned">--</div>
+      </div>
+      <div class="card p-5">
+        <div class="text-xs text-gray-500 mb-1 uppercase tracking-wide font-semibold">Wallet Requests</div>
+        <div class="text-2xl font-bold text-yellow-400 mono" id="sc-wallets">--</div>
+      </div>
+      <div class="card p-5">
+        <div class="text-xs text-gray-500 mb-1 uppercase tracking-wide font-semibold">Payments Made</div>
+        <div class="text-2xl font-bold text-green-400 mono" id="sc-payments">--</div>
+      </div>
+      <div class="card p-5">
+        <div class="text-xs text-gray-500 mb-1 uppercase tracking-wide font-semibold">Total SOL Spent</div>
+        <div class="text-2xl font-bold text-purple-400 mono" id="sc-sol-spent">--</div>
+      </div>
+    </div>
+    <div id="scannerList" class="space-y-3"></div>
+    <div id="scannerEmpty" class="text-center text-gray-500 py-12" hidden>No scanner records found.</div>
+  </div>
+
+</div>
+
+<script>
+/* ==================== CONFIG ==================== */
+const CFG = {
+  tweet:         {label:'Tweet',      color:'#3b82f6', dot:'bg-blue-400',    text:'text-blue-400'},
+  thread:        {label:'Thread',     color:'#6366f1', dot:'bg-indigo-400',  text:'text-indigo-400'},
+  image_tweet:   {label:'Image',      color:'#06b6d4', dot:'bg-cyan-400',    text:'text-cyan-400'},
+  quote_tweet:   {label:'Quote',      color:'#0ea5e9', dot:'bg-sky-400',     text:'text-sky-400'},
+  airdrop:       {label:'Airdrop',    color:'#a855f7', dot:'bg-purple-400',  text:'text-purple-400'},
+  memo_broadcast:{label:'Memo',       color:'#eab308', dot:'bg-yellow-400',  text:'text-yellow-400'},
+  tip:           {label:'Tip',        color:'#ec4899', dot:'bg-pink-400',    text:'text-pink-400'},
+  twitter_boost: {label:'Boost',      color:'#f97316', dot:'bg-orange-400',  text:'text-orange-400'},
+  kol_payment:   {label:'KOL',        color:'#14b8a6', dot:'bg-teal-400',    text:'text-teal-400'},
+  ad_buy:        {label:'Ad Buy',     color:'#f43f5e', dot:'bg-rose-400',    text:'text-rose-400'},
+  custom:        {label:'Custom',     color:'#6b7280', dot:'bg-gray-400',    text:'text-gray-400'},
+};
+
+const chartDefaults = {
+  gridColor: 'rgba(255,255,255,.03)',
+  tickFont: { family:'JetBrains Mono', size:10 },
+  tickColor: '#444',
+  tooltipBg: '#181828',
+  tooltipBorder: '#2a2a44',
+};
+
+/* ==================== HELPERS ==================== */
+const s = n => Number(n).toFixed(4);
+const n = v => Number(v).toLocaleString();
+const sh = (t, l=140) => t.length > l ? t.slice(0,l) + '...' : t;
+function ago(ts) {
+  const d = Date.now() - new Date(ts).getTime();
+  if (d < 60000) return 'just now';
+  if (d < 3600000) return Math.floor(d / 60000) + 'm ago';
+  if (d < 86400000) return Math.floor(d / 3600000) + 'h ago';
+  return Math.floor(d / 86400000) + 'd ago';
+}
+function tweetUrl(id) { return `https://x.com/i/status/${id}`; }
+function solscanTx(sig) { return `https://solscan.io/tx/${sig}`; }
+function getCfg(type) { return CFG[type] || CFG.custom; }
+function el(id) { return document.getElementById(id); }
+
+/* ==================== AUTH ==================== */
+let authToken = localStorage.getItem('pumpshill_token') || '';
+let solPrice = 0;
+
+function authHeaders() {
+  return authToken ? { Authorization: 'Bearer ' + authToken } : {};
+}
+
+async function authFetch(url) {
+  const res = await fetch(url, { headers: authHeaders() });
+  if (res.status === 401) { showLogin(); throw new Error('auth_required'); }
+  return res.json();
+}
+
+async function authPost(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) { showLogin(); throw new Error('auth_required'); }
+  return res.json();
+}
+
+function showLogin() {
+  el('loginOverlay').style.display = 'flex';
+  el('topNav').hidden = true;
+  el('mainContainer').hidden = true;
+}
+
+function hideLogin() {
+  el('loginOverlay').style.display = 'none';
+  el('topNav').hidden = false;
+  el('mainContainer').hidden = false;
+}
+
+async function doLogin() {
+  const pw = el('loginPassword').value.trim();
+  if (!pw) return;
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.token) {
+      el('loginError').textContent = data.error || 'Invalid password';
+      el('loginError').classList.remove('hidden');
+      return;
+    }
+    authToken = data.token;
+    localStorage.setItem('pumpshill_token', authToken);
+    el('loginError').classList.add('hidden');
+    el('loginPassword').value = '';
+    hideLogin();
+    loadOverview();
+  } catch (err) {
+    el('loginError').textContent = 'Connection error';
+    el('loginError').classList.remove('hidden');
+  }
+}
+
+function doLogout() {
+  authToken = '';
+  localStorage.removeItem('pumpshill_token');
+  showLogin();
+}
+
+/* ==================== TABS ==================== */
+let activeTab = 'overview';
+const tabLoaded = {};
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => {
+    c.hidden = c.id !== 'tab-' + tab;
+  });
+  if (tab === 'overview' && !tabLoaded.overview) loadOverview();
+  if (tab === 'campaigns' && !tabLoaded.campaigns) loadCampaigns();
+  if (tab === 'analytics' && !tabLoaded.analytics) loadAnalytics();
+  if (tab === 'alerts' && !tabLoaded.alerts) loadAlerts();
+  if (tab === 'scanner' && !tabLoaded.scanner) loadShillScanner();
+}
+
+/* ==================== CHART HELPERS ==================== */
+function chartScale() {
+  return {
+    grid: { color: chartDefaults.gridColor, drawBorder: false },
+    ticks: { font: chartDefaults.tickFont, color: chartDefaults.tickColor },
+  };
+}
+
+function chartTooltip() {
+  return {
+    backgroundColor: chartDefaults.tooltipBg,
+    borderColor: chartDefaults.tooltipBorder,
+    borderWidth: 1,
+    titleFont: { family: 'Inter', size: 12 },
+    bodyFont: { family: 'JetBrains Mono', size: 11 },
+    padding: 10,
+    cornerRadius: 8,
+  };
+}
+
+let treasuryChartInstance = null;
+let donutChartInstance = null;
+let impressionsByTypeInstance = null;
+let engagementByHourInstance = null;
+let dailyImpressionsInstance = null;
+
+/* ==================== LOAD PRICE ==================== */
+async function loadPrice() {
+  try {
+    const data = await authFetch('/api/price');
+    solPrice = data.price || data.solPrice || 0;
+    el('solBadge').textContent = 'SOL $' + Number(solPrice).toFixed(2);
+  } catch (e) {
+    if (e.message !== 'auth_required') console.warn('Price fetch error', e);
+  }
+}
+
+/* ==================== LOAD OVERVIEW ==================== */
+async function loadOverview() {
+  try {
+    const [stats, spending, treasury] = await Promise.all([
+      authFetch('/api/stats'),
+      authFetch('/api/spending'),
+      authFetch('/api/treasury'),
+    ]);
+    tabLoaded.overview = true;
+    renderOverviewCards(stats);
+    renderTreasuryChart(treasury);
+    renderLedger(treasury);
+    renderCampaignDonut(stats);
+    renderSpending(spending);
+  } catch (e) {
+    if (e.message !== 'auth_required') console.error('Overview error', e);
+  }
+}
+
+function renderOverviewCards(stats) {
+  const balance = stats.balance || stats.treasuryBalance || 0;
+  const earned = stats.totalEarned || stats.earned || 0;
+  const spent = stats.totalSpent || stats.spent || 0;
+  const impressions = stats.totalImpressions || stats.impressions || 0;
+  const campaigns = stats.totalCampaigns || stats.campaigns || 0;
+
+  el('ov-balance').textContent = s(balance) + ' SOL';
+  el('ov-balance-usd').textContent = '$' + (balance * solPrice).toFixed(2);
+  el('ov-earned').textContent = s(earned) + ' SOL';
+  el('ov-earned-usd').textContent = '$' + (earned * solPrice).toFixed(2);
+  el('ov-spent').textContent = s(spent) + ' SOL';
+  el('ov-spent-usd').textContent = '$' + (spent * solPrice).toFixed(2);
+  el('ov-impressions').textContent = n(impressions);
+  el('ov-campaigns-count').textContent = n(campaigns) + ' campaigns';
+}
+
+function renderTreasuryChart(treasury) {
+  const entries = Array.isArray(treasury) ? treasury : treasury.entries || treasury.ledger || [];
+  const sorted = [...entries].sort((a, b) => new Date(a.timestamp || a.time) - new Date(b.timestamp || b.time));
+
+  const labels = sorted.map(e => {
+    const d = new Date(e.timestamp || e.time);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  });
+
+  let runningBalance = 0;
+  const balances = [];
+  const income = [];
+  const spending = [];
+
+  sorted.forEach(e => {
+    const amt = Number(e.amount || 0);
+    if (e.type === 'income' || e.type === 'deposit' || e.type === 'earned' || amt > 0) {
+      income.push(Math.abs(amt));
+      spending.push(0);
+      runningBalance += Math.abs(amt);
+    } else {
+      income.push(0);
+      spending.push(Math.abs(amt));
+      runningBalance -= Math.abs(amt);
+    }
+    balances.push(runningBalance);
+  });
+
+  if (treasuryChartInstance) treasuryChartInstance.destroy();
+  treasuryChartInstance = new Chart(el('treasuryChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Balance',
+          data: balances,
+          borderColor: '#22c55e',
+          backgroundColor: 'rgba(34,197,94,.08)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 0,
+          borderWidth: 2,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Income',
+          data: income,
+          type: 'bar',
+          backgroundColor: 'rgba(16,185,129,.4)',
+          borderRadius: 3,
+          yAxisID: 'y1',
+        },
+        {
+          label: 'Spending',
+          data: spending,
+          type: 'bar',
+          backgroundColor: 'rgba(249,115,22,.4)',
+          borderRadius: 3,
+          yAxisID: 'y1',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: { legend: { display: true, labels: { color: '#64748b', font: { size: 11 } } }, tooltip: chartTooltip() },
+      scales: {
+        x: { ...chartScale(), display: true },
+        y: { ...chartScale(), position: 'left', title: { display: true, text: 'Balance (SOL)', color: '#444', font: { size: 10 } } },
+        y1: { ...chartScale(), position: 'right', grid: { drawOnChartArea: false, color: chartDefaults.gridColor }, title: { display: true, text: 'Txn (SOL)', color: '#444', font: { size: 10 } } },
+      },
+    },
+  });
+}
+
+function renderLedger(treasury) {
+  const entries = Array.isArray(treasury) ? treasury : treasury.entries || treasury.ledger || [];
+  const recent = entries.slice(0, 50);
+  const tbody = el('ledgerTable');
+  if (recent.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-gray-500 py-4">No ledger entries</td></tr>';
+    return;
+  }
+  tbody.innerHTML = recent.map(e => {
+    const ts = e.timestamp || e.time;
+    const amount = Number(e.amount || 0);
+    const isPositive = e.type === 'income' || e.type === 'deposit' || e.type === 'earned' || amount > 0;
+    return `<tr>
+      <td class="mono text-xs text-gray-400">${ago(ts)}</td>
+      <td><span class="badge ${isPositive ? 'bg-green-900/30 text-green-400' : 'bg-orange-900/30 text-orange-400'}">${e.type || 'unknown'}</span></td>
+      <td class="mono ${isPositive ? 'text-green-400' : 'text-orange-400'}">${isPositive ? '+' : '-'}${s(Math.abs(amount))} SOL</td>
+      <td class="text-gray-400 text-sm">${sh(e.reason || e.description || '--', 80)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderCampaignDonut(stats) {
+  const byType = stats.campaignsByType || stats.byType || {};
+  const types = Object.keys(byType);
+  if (types.length === 0) {
+    if (donutChartInstance) donutChartInstance.destroy();
+    return;
+  }
+  const labels = types.map(t => getCfg(t).label);
+  const data = types.map(t => byType[t]);
+  const colors = types.map(t => getCfg(t).color);
+
+  if (donutChartInstance) donutChartInstance.destroy();
+  donutChartInstance = new Chart(el('campaignDonut'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{ data, backgroundColor: colors, borderWidth: 0, hoverOffset: 6 }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 11 }, padding: 12, usePointStyle: true, pointStyleWidth: 8 } },
+        tooltip: chartTooltip(),
+      },
+    },
+  });
+}
+
+function renderSpending(spending) {
+  const successRate = spending.successRate || spending.success_rate || 0;
+  el('spendingSuccessRate').innerHTML = `<div class="flex items-center gap-2">
+    <span class="text-sm text-gray-400">Overall Success Rate:</span>
+    <span class="mono text-lg font-bold ${successRate > 70 ? 'text-green-400' : successRate > 40 ? 'text-yellow-400' : 'text-red-400'}">${Number(successRate).toFixed(1)}%</span>
+  </div>`;
+
+  const byAction = spending.byAction || spending.by_action || spending.breakdown || {};
+  const actions = Object.keys(byAction);
+  const tbody = el('spendingTable');
+  if (actions.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500 py-4">No spending data</td></tr>';
+    return;
+  }
+  tbody.innerHTML = actions.map(action => {
+    const d = byAction[action];
+    const cfg = getCfg(action);
+    const count = d.count || 0;
+    const total = d.total || d.totalSol || 0;
+    const avg = count > 0 ? total / count : 0;
+    const sr = d.successRate || d.success_rate || 0;
+    return `<tr>
+      <td><span class="badge" style="background:${cfg.color}22;color:${cfg.color}">${cfg.label}</span></td>
+      <td class="mono text-sm">${n(count)}</td>
+      <td class="mono text-sm">${s(total)}</td>
+      <td class="mono text-sm">${s(avg)}</td>
+      <td class="mono text-sm ${sr > 70 ? 'text-green-400' : sr > 40 ? 'text-yellow-400' : 'text-red-400'}">${Number(sr).toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ==================== LOAD CAMPAIGNS ==================== */
+async function loadCampaigns() {
+  try {
+    const data = await authFetch('/api/campaigns?limit=50');
+    tabLoaded.campaigns = true;
+    const campaigns = Array.isArray(data) ? data : data.campaigns || [];
+    renderCampaigns(campaigns);
+  } catch (e) {
+    if (e.message !== 'auth_required') console.error('Campaigns error', e);
+  }
+}
+
+function renderCampaigns(campaigns) {
+  const container = el('campaignsList');
+  const empty = el('campaignsEmpty');
+  if (campaigns.length === 0) {
+    container.innerHTML = '';
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+  container.innerHTML = campaigns.map(c => {
+    const cfg = getCfg(c.type || c.action || 'custom');
+    const ts = c.timestamp || c.createdAt || c.time;
+    const cost = c.cost || c.amount || 0;
+    const status = c.status || 'completed';
+    const content = c.content || c.text || c.tweet || '';
+    const tweetId = c.tweetId || c.tweet_id || '';
+    const txSig = c.txSignature || c.tx || c.signature || '';
+    const impressions = c.impressions || c.metrics?.impressions || 0;
+    const likes = c.likes || c.metrics?.likes || 0;
+    const retweets = c.retweets || c.metrics?.retweets || 0;
+
+    const statusColor = status === 'completed' || status === 'success' ? 'text-green-400' :
+                         status === 'pending' ? 'text-yellow-400' :
+                         status === 'failed' ? 'text-red-400' : 'text-gray-400';
+
+    return `<div class="card p-4">
+      <div class="flex items-start justify-between gap-4 mb-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="badge" style="background:${cfg.color}22;color:${cfg.color}"><span class="status-dot ${cfg.dot}" style="width:6px;height:6px"></span>${cfg.label}</span>
+          <span class="text-xs text-gray-500 mono">${ago(ts)}</span>
+          <span class="text-xs ${statusColor} font-medium">${status}</span>
+        </div>
+        <span class="mono text-sm text-orange-400 whitespace-nowrap">${s(cost)} SOL</span>
+      </div>
+      <p class="text-sm text-gray-300 mb-3 leading-relaxed">${sh(content, 280)}</p>
+      <div class="flex items-center gap-4 flex-wrap text-xs">
+        ${impressions > 0 ? `<span class="text-gray-500"><span class="text-blue-400 mono font-medium">${n(impressions)}</span> views</span>` : ''}
+        ${likes > 0 ? `<span class="text-gray-500"><span class="text-pink-400 mono font-medium">${n(likes)}</span> likes</span>` : ''}
+        ${retweets > 0 ? `<span class="text-gray-500"><span class="text-green-400 mono font-medium">${n(retweets)}</span> RTs</span>` : ''}
+        ${tweetId ? `<a href="${tweetUrl(tweetId)}" target="_blank" rel="noopener" class="text-blue-400 hover:text-blue-300 transition">View Tweet</a>` : ''}
+        ${txSig ? `<a href="${solscanTx(txSig)}" target="_blank" rel="noopener" class="text-purple-400 hover:text-purple-300 transition">View Tx</a>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ==================== LOAD ANALYTICS ==================== */
+async function loadAnalytics() {
+  try {
+    const data = await authFetch('/api/analytics');
+    tabLoaded.analytics = true;
+    renderAnalytics(data);
+  } catch (e) {
+    if (e.message !== 'auth_required') console.error('Analytics error', e);
+  }
+}
+
+function renderAnalytics(data) {
+  const totalImp = data.totalImpressions || 0;
+  const engRate = data.engagementRate || 0;
+  const bestType = data.bestType || '--';
+  const bestHour = data.bestHour != null ? String(data.bestHour).padStart(2, '0') + ':00' : '--';
+
+  el('an-impressions').textContent = n(totalImp);
+  el('an-engagement').textContent = Number(engRate).toFixed(2) + '%';
+  el('an-best-type').textContent = getCfg(bestType).label || bestType;
+  el('an-best-hour').textContent = bestHour;
+
+  renderImpressionsByType(data.byType || data.impressionsByType || {});
+  renderEngagementByHour(data.byHour || data.engagementByHour || {});
+  renderDailyImpressions(data.daily || data.dailyImpressions || []);
+}
+
+function renderImpressionsByType(byType) {
+  const types = Object.keys(byType);
+  const labels = types.map(t => getCfg(t).label);
+  const data = types.map(t => byType[t].avgImpressions || byType[t].avg || byType[t]);
+  const colors = types.map(t => getCfg(t).color);
+
+  if (impressionsByTypeInstance) impressionsByTypeInstance.destroy();
+  impressionsByTypeInstance = new Chart(el('impressionsByTypeChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Avg Impressions',
+        data,
+        backgroundColor: colors.map(c => c + '99'),
+        borderColor: colors,
+        borderWidth: 1,
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: chartTooltip() },
+      scales: { x: chartScale(), y: chartScale() },
+    },
+  });
+}
+
+function renderEngagementByHour(byHour) {
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const labels = hours.map(h => String(h).padStart(2, '0'));
+  const data = hours.map(h => byHour[h] || byHour[String(h)] || 0);
+
+  if (engagementByHourInstance) engagementByHourInstance.destroy();
+  engagementByHourInstance = new Chart(el('engagementByHourChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Engagement',
+        data,
+        backgroundColor: 'rgba(249,115,22,.5)',
+        borderColor: '#f97316',
+        borderWidth: 1,
+        borderRadius: 3,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: chartTooltip() },
+      scales: { x: chartScale(), y: chartScale() },
+    },
+  });
+}
+
+function renderDailyImpressions(daily) {
+  const sorted = [...daily].sort((a, b) => new Date(a.date || a.day) - new Date(b.date || b.day));
+  const labels = sorted.map(d => {
+    const dt = new Date(d.date || d.day);
+    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  });
+  const impressions = sorted.map(d => d.impressions || d.views || 0);
+  const likes = sorted.map(d => d.likes || 0);
+
+  if (dailyImpressionsInstance) dailyImpressionsInstance.destroy();
+  dailyImpressionsInstance = new Chart(el('dailyImpressionsChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Impressions',
+          data: impressions,
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59,130,246,.08)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2,
+          pointHoverRadius: 5,
+          borderWidth: 2,
+        },
+        {
+          label: 'Likes',
+          data: likes,
+          borderColor: '#ec4899',
+          borderDash: [5, 5],
+          tension: 0.3,
+          pointRadius: 0,
+          borderWidth: 1.5,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { display: true, labels: { color: '#64748b', font: { size: 11 }, usePointStyle: true, pointStyleWidth: 8 } },
+        tooltip: chartTooltip(),
+      },
+      scales: { x: chartScale(), y: chartScale() },
+    },
+  });
+}
+
+/* ==================== LOAD ALERTS ==================== */
+async function loadAlerts() {
+  try {
+    const data = await authFetch('/api/alerts');
+    tabLoaded.alerts = true;
+    renderAlerts(data);
+  } catch (e) {
+    if (e.message !== 'auth_required') console.error('Alerts error', e);
+  }
+}
+
+function renderAlerts(data) {
+  const alerts = Array.isArray(data) ? data : data.alerts || data.queue || [];
+  const container = el('alertsList');
+  const empty = el('alertsEmpty');
+
+  const totalSol = alerts.reduce((sum, a) => sum + (a.allocatedSol || a.allocated || a.amount || 0), 0);
+  el('alertsBadge').textContent = `${alerts.length} queued | ${s(totalSol)} SOL`;
+
+  if (alerts.length === 0) {
+    container.innerHTML = '';
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+  container.innerHTML = alerts.map((a, i) => {
+    const allocated = a.allocatedSol || a.allocated || a.amount || 0;
+    const content = a.content || a.text || a.tweet || '';
+    const reason = a.reason || '';
+    const views = a.views || a.impressions || a.metrics?.views || 0;
+    const likes = a.likes || a.metrics?.likes || 0;
+    const rts = a.retweets || a.rts || a.metrics?.retweets || 0;
+    const tweetId = a.tweetId || a.tweet_id || '';
+    const alertId = a.id || a._id || i;
+
+    return `<div class="card p-4 fade-in">
+      <div class="flex items-start justify-between gap-4 mb-2">
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-gray-500 font-bold mono">#${i + 1}</span>
+          <span class="badge bg-yellow-900/30 text-yellow-400 mono">${s(allocated)} SOL</span>
+        </div>
+        <button class="btn btn-ghost text-xs" onclick="dismissAlert('${alertId}')">Dismiss</button>
+      </div>
+      <p class="text-sm text-gray-300 mb-2 leading-relaxed">${sh(content, 200)}</p>
+      ${reason ? `<p class="text-xs text-gray-500 mb-3 italic">${sh(reason, 120)}</p>` : ''}
+      <div class="flex items-center gap-4 flex-wrap text-xs">
+        <span class="text-gray-500"><span class="text-blue-400 mono font-medium">${n(views)}</span> views</span>
+        <span class="text-gray-500"><span class="text-pink-400 mono font-medium">${n(likes)}</span> likes</span>
+        <span class="text-gray-500"><span class="text-green-400 mono font-medium">${n(rts)}</span> RTs</span>
+        ${tweetId ? `<a href="${tweetUrl(tweetId)}" target="_blank" rel="noopener" class="text-blue-400 hover:text-blue-300 transition">View Tweet</a>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function dismissAlert(id) {
+  try {
+    await authPost(`/api/alerts/${id}/dismiss`, {});
+    loadAlerts();
+  } catch (e) {
+    if (e.message !== 'auth_required') console.error('Dismiss error', e);
+  }
+}
+
+/* ==================== LOAD SHILL SCANNER ==================== */
+async function loadShillScanner() {
+  try {
+    const data = await authFetch('/api/shill-scanner');
+    tabLoaded.scanner = true;
+    renderShillScanner(data);
+  } catch (e) {
+    if (e.message !== 'auth_required') console.error('Scanner error', e);
+  }
+}
+
+function renderShillScanner(data) {
+  const stats = data.stats || {};
+  const records = data.records || data.entries || [];
+
+  el('sc-scanned').textContent = n(stats.tweetsScanned || stats.scanned || 0);
+  el('sc-wallets').textContent = n(stats.walletRequests || stats.wallets || 0);
+  el('sc-payments').textContent = n(stats.paymentsMade || stats.payments || 0);
+  el('sc-sol-spent').textContent = s(stats.totalSolSpent || stats.solSpent || 0);
+
+  const container = el('scannerList');
+  const empty = el('scannerEmpty');
+  if (records.length === 0) {
+    container.innerHTML = '';
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+  container.innerHTML = records.map(r => {
+    const author = r.author || r.username || r.user || 'unknown';
+    const content = r.content || r.text || r.tweet || '';
+    const impressions = r.impressions || r.views || 0;
+    const likes = r.likes || 0;
+    const status = r.status || 'discovered';
+    const wallet = r.wallet || r.walletAddress || '';
+    const paymentSig = r.paymentSignature || r.signature || r.txSignature || '';
+    const discoveredAt = r.discoveredAt || r.createdAt || r.timestamp || '';
+    const paidAt = r.paidAt || '';
+
+    const statusColors = {
+      discovered: 'bg-gray-700 text-gray-300',
+      wallet_requested: 'bg-yellow-900/30 text-yellow-400',
+      paid: 'bg-green-900/30 text-green-400',
+      failed: 'bg-red-900/30 text-red-400',
+    };
+    const statusClass = statusColors[status] || statusColors.discovered;
+
+    return `<div class="card p-4">
+      <div class="flex items-start justify-between gap-4 mb-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-sm font-semibold text-blue-400">@${author}</span>
+          <span class="badge ${statusClass}">${status.replace('_', ' ')}</span>
+        </div>
+        <div class="flex items-center gap-3 text-xs text-gray-500">
+          ${impressions > 0 ? `<span><span class="text-blue-400 mono">${n(impressions)}</span> views</span>` : ''}
+          ${likes > 0 ? `<span><span class="text-pink-400 mono">${n(likes)}</span> likes</span>` : ''}
+        </div>
+      </div>
+      <p class="text-sm text-gray-300 mb-3 leading-relaxed">${sh(content, 200)}</p>
+      <div class="flex items-center gap-4 flex-wrap text-xs">
+        ${wallet ? `<span class="text-gray-500">Wallet: <span class="mono text-gray-400">${wallet.slice(0, 8)}...${wallet.slice(-6)}</span></span>` : ''}
+        ${paymentSig ? `<a href="${solscanTx(paymentSig)}" target="_blank" rel="noopener" class="text-purple-400 hover:text-purple-300 transition">View Payment</a>` : ''}
+        ${discoveredAt ? `<span class="text-gray-500">Discovered: <span class="mono">${ago(discoveredAt)}</span></span>` : ''}
+        ${paidAt ? `<span class="text-gray-500">Paid: <span class="mono">${ago(paidAt)}</span></span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ==================== INIT & AUTO-REFRESH ==================== */
+async function init() {
+  await loadPrice();
+  try {
+    await loadOverview();
+    hideLogin();
+  } catch (e) {
+    showLogin();
+  }
+}
+
+init();
+
+// Auto-refresh intervals
+setInterval(() => {
+  if (activeTab === 'overview') loadOverview();
+}, 10000);
+
+setInterval(() => {
+  if (activeTab === 'alerts') loadAlerts();
+}, 15000);
+
+setInterval(() => {
+  loadPrice();
+}, 30000);
+
+setInterval(() => {
+  if (activeTab === 'analytics') loadAnalytics();
+}, 60000);
+</script>
+
+</body>
+</html>

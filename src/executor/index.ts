@@ -2,12 +2,15 @@ import { CampaignProposal } from "../brain";
 import { Campaign, CampaignMetrics, Tracker } from "../tracker";
 import { Treasury } from "../treasury";
 import { logger } from "../utils/logger";
-import { postTweet, postThread } from "./twitter";
+import { postTweet, postThread, postTweetWithImage, postQuoteTweet } from "./twitter";
 import { sendAirdrop, sendMemo, sendTip } from "./onchain";
 import { sendTelegramNotification } from "./telegram";
 import { boostTweet } from "./twitter-ads";
 import { payKol } from "./kol";
 import { createAdCampaign } from "./ad-network";
+import { generateImage } from "./image-gen";
+import { postCast } from "./farcaster";
+import { config } from "../config";
 
 export interface ExecutionResult {
   success: boolean;
@@ -15,6 +18,7 @@ export interface ExecutionResult {
   txSignature?: string;
   adCampaignId?: string;
   estimatedReach?: number;
+  castHash?: string;
 }
 
 export async function executeCampaign(
@@ -27,6 +31,22 @@ export async function executeCampaign(
     "Executing campaign"
   );
 
+  // Content dedup check
+  if (tracker.isDuplicate(proposal.content, 48)) {
+    logger.warn(
+      { action: proposal.action, content: proposal.content.slice(0, 60) },
+      "Duplicate content detected — skipping"
+    );
+    const campaign = tracker.logCampaign({
+      action: proposal.action,
+      content: proposal.content,
+      cost: 0,
+      reasoning: proposal.reasoning,
+      status: "failed",
+    });
+    return campaign;
+  }
+
   let result: ExecutionResult = { success: false };
 
   try {
@@ -34,6 +54,35 @@ export async function executeCampaign(
       case "tweet": {
         const tw = await postTweet(proposal.content);
         result = { success: tw.success, tweetId: tw.tweetId };
+        break;
+      }
+
+      case "image_tweet": {
+        const imagePrompt = (proposal.metadata?.imagePrompt as string) || proposal.content;
+        const imageBuffer = await generateImage(imagePrompt);
+        if (imageBuffer) {
+          const tw = await postTweetWithImage(proposal.content, imageBuffer);
+          result = { success: tw.success, tweetId: tw.tweetId };
+        } else {
+          // Fallback to text tweet if image gen fails
+          logger.warn("Image generation failed, falling back to text tweet");
+          const tw = await postTweet(proposal.content);
+          result = { success: tw.success, tweetId: tw.tweetId };
+        }
+        break;
+      }
+
+      case "quote_tweet": {
+        const quoteTweetId = proposal.metadata?.quoteTweetId as string;
+        if (!quoteTweetId) {
+          logger.warn("Quote tweet proposed but no quoteTweetId in metadata");
+          // Fallback to regular tweet
+          const tw = await postTweet(proposal.content);
+          result = { success: tw.success, tweetId: tw.tweetId };
+        } else {
+          const tw = await postQuoteTweet(proposal.content, quoteTweetId);
+          result = { success: tw.success, tweetId: tw.tweetId };
+        }
         break;
       }
 
@@ -48,7 +97,6 @@ export async function executeCampaign(
       }
 
       case "airdrop": {
-        // AI should provide recipients in metadata
         const recipients = (proposal.metadata?.recipients as string[]) || [];
         const amountEach = (proposal.metadata?.amountEach as number) || 0.001;
         if (recipients.length === 0) {
@@ -161,10 +209,28 @@ export async function executeCampaign(
     result = { success: false };
   }
 
+  // Cross-post to Farcaster if enabled and campaign was a tweet-based action
+  if (
+    config.farcaster.enabled &&
+    result.success &&
+    ["tweet", "image_tweet", "quote_tweet"].includes(proposal.action)
+  ) {
+    try {
+      const castResult = await postCast(proposal.content);
+      if (castResult.success) {
+        result.castHash = castResult.castHash;
+        logger.info({ castHash: castResult.castHash }, "Cross-posted to Farcaster");
+      }
+    } catch (err) {
+      logger.warn({ err }, "Farcaster cross-post failed (non-blocking)");
+    }
+  }
+
   const metrics: Record<string, unknown> = {};
   if (result.txSignature) metrics.txSignature = result.txSignature;
   if (result.adCampaignId) metrics.adCampaignId = result.adCampaignId;
   if (result.estimatedReach) metrics.estimatedReach = result.estimatedReach;
+  if (result.castHash) metrics.castHash = result.castHash;
 
   const campaign = tracker.logCampaign({
     action: proposal.action,
@@ -179,5 +245,56 @@ export async function executeCampaign(
   // Send Telegram notification (fire and forget)
   sendTelegramNotification(campaign).catch(() => {});
 
+  // Tweet proof of payment for paid actions (non-blocking)
+  if (result.success && proposal.budget > 0) {
+    tweetSpendProof(proposal, result).catch(() => {});
+  }
+
   return campaign;
+}
+
+/**
+ * Tweet public proof when PumpShill spends SOL on any paid action.
+ */
+async function tweetSpendProof(
+  proposal: CampaignProposal,
+  result: ExecutionResult
+): Promise<void> {
+  const sig = result.txSignature;
+  const solscan = sig ? `https://solscan.io/tx/${sig}` : "";
+  let proofText = "";
+
+  switch (proposal.action) {
+    case "kol_payment":
+      proofText = `Just paid ${proposal.budget} SOL to a KOL for promoting Pumpfun.\n\nOn-chain proof: ${solscan}\n\nPumpShill puts fees to work.`;
+      break;
+    case "ad_buy":
+      proofText = `Spent ${proposal.budget} SOL on crypto display ads for Pumpfun. Campaign is live.\n\nAutonomous ad buying — powered by creator fees.`;
+      break;
+    case "airdrop": {
+      const recipients = (proposal.metadata?.recipients as string[]) || [];
+      proofText = `Airdropped SOL to ${recipients.length} Pumpfun traders.\n\nProof: ${solscan}\n\nRewards for the community.`;
+      break;
+    }
+    case "tip":
+      proofText = `Tipped ${proposal.budget} SOL to a Pumpfun community member.\n\nProof: ${solscan}\n\nGood vibes only.`;
+      break;
+    case "twitter_boost":
+      proofText = `Boosting a viral Pumpfun tweet with ${proposal.budget} SOL worth of ads.\n\nFueling organic reach with paid amplification.`;
+      break;
+    case "memo_broadcast":
+      proofText = `Broadcast an on-chain memo for ${proposal.budget} SOL.\n\nProof: ${solscan}\n\nPermanent Pumpfun lore on Solana.`;
+      break;
+    default:
+      return; // Don't tweet proof for unknown paid actions
+  }
+
+  if (proofText) {
+    try {
+      await postTweet(proofText);
+      logger.info({ action: proposal.action }, "Spend proof tweeted");
+    } catch (err) {
+      logger.warn({ err }, "Failed to tweet spend proof (non-blocking)");
+    }
+  }
 }
