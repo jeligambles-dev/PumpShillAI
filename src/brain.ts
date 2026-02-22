@@ -31,7 +31,7 @@ Available actions:
 - "tweet": Single tweet. Keep under 280 chars. Your bread and butter — low cost, high reach.
 - "thread": Twitter thread. Join tweets with |||. Good for deep dives, weekly reports, storytelling. 3-6 tweets ideal.
 - "image_tweet": A tweet with an AI-generated image. Include "imagePrompt" in metadata describing the visual in detail (what the image should depict). Use for meme-worthy content, data visualizations, or eye-catching promo art. Free action (no SOL cost). Use ~20% of the time to add visual variety to the feed.
-- "quote_tweet": Quote tweet a viral/trending crypto tweet with your commentary. Include "quoteTweetId" in metadata (from the trending tweets provided). Great for engagement farming — piggyback on existing conversations. Free action.
+- "quote_tweet": Quote tweet a viral/trending crypto tweet with your commentary. Include "quoteTweetId" AND "quoteTweetAuthorId" in metadata (from the trending tweets provided). Great for engagement farming — piggyback on existing conversations. Free action.
 - "airdrop": Send small SOL to active Pumpfun wallets. Costs real SOL. Use for high-impact community moments.
 - "memo_broadcast": On-chain message via Solana memo program. Permanent blockchain graffiti. Costs ~0.0001 SOL.
 - "tip": Send SOL to a specific person/wallet. Costs SOL. Use to reward community members or get influencer attention.
@@ -74,7 +74,7 @@ export class Brain {
     maxBudget: number;
     pastCampaigns: Campaign[];
     recentContentSnippets?: string[];
-    trendingTweets?: Array<{ id: string; text: string; metrics?: { impressions?: number; likes?: number } }>;
+    trendingTweets?: Array<{ id: string; text: string; authorId?: string; metrics?: { impressions?: number; likes?: number } }>;
     solPriceUsd?: number;
   }): Promise<CampaignProposal> {
     const pastSummary =
@@ -93,7 +93,7 @@ export class Brain {
       : "";
 
     const trendingSection = context.trendingTweets?.length
-      ? `\n\nTrending crypto tweets you could quote-tweet (use "quote_tweet" action with quoteTweetId in metadata):\n${context.trendingTweets.map((t) => `- ID: ${t.id} | "${t.text.slice(0, 100)}" | ${t.metrics?.impressions || 0} views, ${t.metrics?.likes || 0} likes`).join("\n")}`
+      ? `\n\nTrending crypto tweets you could quote-tweet (use "quote_tweet" action with quoteTweetId in metadata):\n${context.trendingTweets.map((t) => `- ID: ${t.id} | AuthorID: ${t.authorId || "unknown"} | "${t.text.slice(0, 100)}" | ${t.metrics?.impressions || 0} views, ${t.metrics?.likes || 0} likes`).join("\n")}`
       : "";
 
     const priceSection = context.solPriceUsd

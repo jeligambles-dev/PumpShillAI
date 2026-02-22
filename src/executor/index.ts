@@ -11,6 +11,7 @@ import { createAdCampaign } from "./ad-network";
 import { generateImage } from "./image-gen";
 import { postCast } from "./farcaster";
 import { config } from "../config";
+import { hasInteracted, trackInteraction } from "../utils/interaction-tracker";
 
 export interface ExecutionResult {
   success: boolean;
@@ -74,14 +75,25 @@ export async function executeCampaign(
 
       case "quote_tweet": {
         const quoteTweetId = proposal.metadata?.quoteTweetId as string;
+        const quoteTweetAuthorId = proposal.metadata?.quoteTweetAuthorId as string;
         if (!quoteTweetId) {
           logger.warn("Quote tweet proposed but no quoteTweetId in metadata");
           // Fallback to regular tweet
           const tw = await postTweet(proposal.content);
           result = { success: tw.success, tweetId: tw.tweetId };
+        } else if (quoteTweetAuthorId && hasInteracted(quoteTweetAuthorId)) {
+          logger.warn(
+            { authorId: quoteTweetAuthorId },
+            "Already interacted with this author — falling back to regular tweet"
+          );
+          const tw = await postTweet(proposal.content);
+          result = { success: tw.success, tweetId: tw.tweetId };
         } else {
           const tw = await postQuoteTweet(proposal.content, quoteTweetId);
           result = { success: tw.success, tweetId: tw.tweetId };
+          if (tw.success && quoteTweetAuthorId) {
+            trackInteraction(quoteTweetAuthorId, "quote_tweet");
+          }
         }
         break;
       }

@@ -12,6 +12,7 @@ import { MentionHandler } from "./mentions";
 import { ShillScanner } from "./shill-scanner";
 import { PriceFeed } from "./price-feed";
 import { logger } from "./utils/logger";
+import { seedFromExisting } from "./utils/interaction-tracker";
 
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -35,6 +36,13 @@ async function main() {
   await mentionHandler.initialize();
   await shillScanner.initialize();
   await priceFeed.start(60000); // Poll SOL price every 60s
+
+  // Seed interaction tracker with existing records so we don't re-contact anyone
+  const existingAuthorIds = [
+    ...shillScanner.getRecords().map((r) => r.authorId),
+    ...mentionHandler.getRewardRecords().map((r) => r.authorId),
+  ];
+  seedFromExisting(existingAuthorIds);
 
   // Start dashboard server
   const port = Number(process.env.DASHBOARD_PORT) || 3000;
@@ -90,7 +98,7 @@ async function main() {
       );
 
       // 2. Fetch trending crypto tweets for quote-tweet context
-      let trendingTweets: Array<{ id: string; text: string; metrics?: { impressions?: number; likes?: number } }> = [];
+      let trendingTweets: Array<{ id: string; text: string; authorId?: string; metrics?: { impressions?: number; likes?: number } }> = [];
       try {
         trendingTweets = await searchRecentTweets("pumpfun OR pump.fun OR solana memecoin", 5);
       } catch (err) {

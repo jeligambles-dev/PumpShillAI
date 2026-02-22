@@ -10,6 +10,7 @@ import { payKol } from "./executor/kol";
 import { Tracker } from "./tracker";
 import { Treasury } from "./treasury";
 import { logger } from "./utils/logger";
+import { hasInteracted, trackInteraction } from "./utils/interaction-tracker";
 
 export interface ShillRecord {
   id: string;
@@ -142,6 +143,9 @@ export class ShillScanner {
         // Skip if no author info
         if (!tweet.authorId || !tweet.authorUsername) continue;
 
+        // Skip if we've already interacted with this author
+        if (hasInteracted(tweet.authorId)) continue;
+
         const impressions = tweet.metrics?.impressions || 0;
         const likes = tweet.metrics?.likes || 0;
 
@@ -178,6 +182,7 @@ export class ShillScanner {
 
           record.walletRequestTweetId = replyResult.data.id;
           record.status = "wallet_requested";
+          trackInteraction(tweet.authorId, "shill_request", tweet.authorUsername);
           requested++;
 
           logger.info(

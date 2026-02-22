@@ -9,6 +9,7 @@ import { postTweet } from "./executor/twitter";
 import { Tracker } from "./tracker";
 import { Treasury } from "./treasury";
 import { logger } from "./utils/logger";
+import { hasInteracted, trackInteraction } from "./utils/interaction-tracker";
 
 interface Mention {
   id: string;
@@ -192,7 +193,7 @@ export class MentionHandler {
         // Skip our own tweets
         if (mention.authorId === this.botUserId) continue;
 
-        // Check if this is a wallet reply to a reward request
+        // Check if this is a wallet reply to a pending reward (allow even if already interacted)
         const pendingReward = this.rewardRecords.find(
           (r) => r.status === "wallet_requested" && r.authorId === mention.authorId && !r.walletAddress
         );
@@ -213,6 +214,12 @@ export class MentionHandler {
               // Invalid address, treat as normal mention
             }
           }
+        }
+
+        // Skip if we've already interacted with this author before
+        if (hasInteracted(mention.authorId)) {
+          this.repliedIds.add(mention.id);
+          continue;
         }
 
         try {
@@ -236,6 +243,7 @@ export class MentionHandler {
               reply: { in_reply_to_tweet_id: mention.id },
             });
             this.repliedIds.add(mention.id);
+            trackInteraction(mention.authorId, "mention_reply", mention.authorUsername);
             replied++;
 
             // Track reward if cool
