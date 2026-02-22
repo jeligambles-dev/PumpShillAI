@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PumpShill — Autonomous Pumpfun Advertiser</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            lime: { 300:'#84efab', 400:'#5fcb87', 500:'#4bba76' },
+            s: { 1:'#15161b', 2:'#1a1b23', 3:'#1f2029', 4:'#252631', b:'#2a2b38', b2:'#35364a' }
+          },
+          fontFamily: { sans:['Inter','system-ui','sans-serif'], mono:['JetBrains Mono','monospace'] }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#15161b;color:#c8c8d8;font-family:'Inter',system-ui,sans-serif;overflow-x:hidden}
+    .mono{font-family:'JetBrains Mono',monospace}
+    .hero-glow{background:radial-gradient(ellipse 60% 40% at 50% 0%,rgba(95,203,135,.08) 0%,transparent 60%),radial-gradient(ellipse 40% 30% at 80% 20%,rgba(132,239,171,.03) 0%,transparent 50%)}
+    .grid-bg{background-image:linear-gradient(rgba(255,255,255,.012) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.012) 1px,transparent 1px);background-size:50px 50px}
+    .card{background:#1a1b23;border:1px solid #2a2b38;border-radius:16px}
+    .card-inner{background:#1f2029;border:1px solid rgba(42,43,56,.5);border-radius:12px}
+    @keyframes pulse-dot{0%,100%{opacity:1;box-shadow:0 0 8px rgba(95,203,135,.6)}50%{opacity:.4;box-shadow:0 0 2px rgba(95,203,135,.2)}}
+    @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+    @keyframes slide-up{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+    @keyframes ticker-scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+    @keyframes typing{from{width:0}to{width:100%}}
+    .pulse-dot{animation:pulse-dot 2s ease-in-out infinite}
+    .float{animation:float 5s ease-in-out infinite}
+    .slide-up{animation:slide-up .6s ease-out forwards}
+    .slide-d1{animation:slide-up .6s ease-out .1s forwards;opacity:0}
+    .slide-d2{animation:slide-up .6s ease-out .2s forwards;opacity:0}
+    .slide-d3{animation:slide-up .6s ease-out .3s forwards;opacity:0}
+    .slide-d4{animation:slide-up .6s ease-out .4s forwards;opacity:0}
+    .shimmer{background:linear-gradient(90deg,transparent 0%,rgba(95,203,135,.03) 50%,transparent 100%);background-size:200% 100%;animation:shimmer 3s ease-in-out infinite}
+    .nav-blur{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(21,22,27,.85)}
+    html{scroll-behavior:smooth}
+    ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#1e1e32;border-radius:10px}
+    .feed-item{transition:all .2s ease}.feed-item:hover{background:#252631;border-color:#35364a}
+    .cursor-blink::after{content:'_';animation:blink 1s step-end infinite;color:#5fcb87}
+    /* Ticker */
+    .ticker-wrap{overflow:hidden;white-space:nowrap}
+    .ticker-move{display:inline-flex;animation:ticker-scroll 40s linear infinite}
+    .ticker-move:hover{animation-play-state:paused}
+    /* Copy button */
+    .copy-btn{transition:all .15s ease}.copy-btn:active{transform:scale(.95)}
+    /* Brain terminal */
+    .brain-line{animation:slide-up .3s ease-out forwards;opacity:0}
+  </style>
+</head>
+<body>
+
+  <!-- ===== LIVE TICKER ===== -->
+  <div id="ticker-bar" class="fixed top-0 left-0 right-0 z-[60] bg-lime-500/5 border-b border-lime-500/10 h-8 flex items-center ticker-wrap">
+    <div id="ticker-content" class="ticker-move text-[11px] mono text-gray-400 gap-8">
+      <span class="text-gray-600">Loading activity...</span>
+    </div>
+  </div>
+
+  <!-- ===== NAV ===== -->
+  <nav class="fixed top-8 left-0 right-0 z-50 nav-blur border-b border-s-b">
+    <div class="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-2 h-2 rounded-full bg-lime-400 pulse-dot"></div>
+        <span class="font-bold text-white tracking-tight">PumpShill</span>
+      </div>
+      <div class="hidden md:flex items-center gap-8 text-[13px] text-gray-500">
+        <a href="#how" class="hover:text-white transition-colors">How It Works</a>
+        <a href="#dashboard" class="hover:text-white transition-colors">Dashboard</a>
+        <a href="#feed" class="hover:text-white transition-colors">Campaigns</a>
+      </div>
+      <div class="flex items-center gap-3">
+        <!-- Social links in nav -->
+        <a id="nav-twitter" href="#" target="_blank" class="w-8 h-8 rounded-lg bg-s-3 border border-s-b flex items-center justify-center hover:border-blue-500/30 transition-all">
+          <svg class="w-3.5 h-3.5 text-gray-400" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        </a>
+        <a id="nav-telegram" href="#" target="_blank" class="w-8 h-8 rounded-lg bg-s-3 border border-s-b flex items-center justify-center hover:border-blue-400/30 transition-all">
+          <svg class="w-3.5 h-3.5 text-gray-400" fill="currentColor" viewBox="0 0 24 24"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+        </a>
+        <a id="nav-buy" href="#" target="_blank" class="text-[13px] font-semibold bg-lime-500 text-black px-4 py-1.5 rounded-full hover:bg-lime-400 transition-all hover:scale-[1.03] active:scale-[.97]">
+          Buy on Pumpfun
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ===== HERO ===== -->
+  <section class="hero-glow grid-bg relative min-h-screen flex items-center justify-center" style="padding-top:calc(56px + 32px + 40px)">
+    <div class="max-w-4xl mx-auto px-6 text-center">
+      <div class="slide-up inline-flex items-center gap-2 bg-s-2 border border-s-b rounded-full px-4 py-1.5 mb-8">
+        <div class="w-1.5 h-1.5 rounded-full bg-lime-400 pulse-dot"></div>
+        <span class="text-[11px] font-medium text-gray-500 tracking-wider uppercase">Autonomous AI Agent — Live on Solana</span>
+      </div>
+
+      <h1 class="slide-d1 text-5xl md:text-7xl font-black text-white leading-[1.05] tracking-tight mb-6">
+        An AI that<br>
+        <span class="text-lime-400" style="text-shadow:0 0 60px rgba(95,203,135,.3)">advertises Pumpfun</span><br>
+        using its own fees
+      </h1>
+
+      <p class="slide-d2 text-lg text-gray-400 max-w-2xl mx-auto mb-8 leading-relaxed">
+        A self-funding autonomous agent. It earns creator fees from its Pumpfun token, then uses AI to brainstorm and execute viral campaigns across Twitter and on-chain.
+      </p>
+
+      <!-- Contract Address -->
+      <div class="slide-d3 mb-8">
+        <div class="inline-flex items-center gap-2 bg-s-2 border border-s-b rounded-xl px-4 py-2.5 max-w-md">
+          <span class="text-[10px] text-gray-500 uppercase tracking-wider shrink-0">CA</span>
+          <span id="hero-ca" class="text-[12px] mono text-gray-300 truncate">Loading...</span>
+          <button onclick="copyCA()" class="copy-btn shrink-0 w-7 h-7 rounded-lg bg-s-3 border border-s-b flex items-center justify-center hover:border-lime-500/30 group" title="Copy">
+            <svg id="copy-icon" class="w-3.5 h-3.5 text-gray-400 group-hover:text-lime-400 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+            <svg id="check-icon" class="w-3.5 h-3.5 text-lime-400 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- CTAs -->
+      <div class="slide-d4 flex flex-wrap items-center justify-center gap-3">
+        <a id="hero-buy" href="#" target="_blank" class="bg-lime-500 text-black font-semibold px-8 py-3 rounded-full hover:bg-lime-400 transition-all hover:scale-[1.03] active:scale-[.97]">
+          Buy on Pumpfun
+        </a>
+        <a id="hero-twitter" href="#" target="_blank" class="border border-s-b text-gray-300 font-medium px-6 py-3 rounded-full hover:border-blue-500/30 hover:text-white transition-all flex items-center gap-2">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          Follow the AI
+        </a>
+        <a href="#dashboard" class="border border-s-b text-gray-300 font-medium px-6 py-3 rounded-full hover:border-gray-600 hover:text-white transition-all">
+          Live Dashboard
+        </a>
+      </div>
+
+      <!-- Mini preview card -->
+      <div class="mt-16 float">
+        <div class="mx-auto w-[340px] card p-4 text-left" style="box-shadow:0 0 80px rgba(95,203,135,.08)">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="w-2 h-2 rounded-full bg-lime-400 pulse-dot"></div>
+            <span class="text-[10px] mono text-gray-500 tracking-wider">AI BRAIN — CYCLE #847</span>
+          </div>
+          <div class="space-y-1.5">
+            <div class="card-inner px-3 py-2 flex justify-between items-center">
+              <span class="text-[10px] text-gray-500 mono">action</span>
+              <span class="text-[13px] text-lime-400 font-medium">tweet</span>
+            </div>
+            <div class="card-inner px-3 py-2">
+              <span class="text-[10px] text-gray-500 mono">content</span>
+              <p class="text-[12px] text-gray-300 mt-0.5">"Pumpfun is where degens are born..."</p>
+            </div>
+            <div class="card-inner px-3 py-2 flex justify-between items-center">
+              <div><span class="text-[10px] text-gray-500 mono">cost </span><span class="text-[12px] text-gray-400 mono">0 SOL</span></div>
+              <div class="flex items-center gap-1.5"><div class="w-1.5 h-1.5 rounded-full bg-lime-400 pulse-dot"></div><span class="text-[11px] text-lime-400 mono">executing</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== TOKENOMICS ===== -->
+  <section class="py-16 border-t border-s-b">
+    <div class="max-w-4xl mx-auto px-6">
+      <div class="grid md:grid-cols-3 gap-3">
+        <div class="card p-5 text-center">
+          <p class="text-[11px] text-gray-500 uppercase tracking-wider mb-2">Fee Allocation</p>
+          <p class="text-2xl font-bold text-lime-400">100%</p>
+          <p class="text-[12px] text-gray-500 mt-1">of creator fees go to advertising</p>
+        </div>
+        <div class="card p-5 text-center">
+          <p class="text-[11px] text-gray-500 uppercase tracking-wider mb-2">Fully Transparent</p>
+          <p class="text-2xl font-bold text-white">On-chain</p>
+          <p class="text-[12px] text-gray-500 mt-1">Every tx verifiable on Solscan</p>
+        </div>
+        <div class="card p-5 text-center">
+          <p class="text-[11px] text-gray-500 uppercase tracking-wider mb-2">AI Powered</p>
+          <p class="text-2xl font-bold text-white">Claude</p>
+          <p class="text-[12px] text-gray-500 mt-1">Brainstorms every campaign</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== HOW IT WORKS ===== -->
+  <section id="how" class="py-28 border-t border-s-b">
+    <div class="max-w-5xl mx-auto px-6">
+      <div class="text-center mb-20">
+        <p class="text-[11px] font-semibold text-lime-400 tracking-[.2em] uppercase mb-3">The Loop</p>
+        <h2 class="text-4xl md:text-5xl font-bold text-white">How It Works</h2>
+      </div>
+      <div class="grid md:grid-cols-4 gap-5">
+        <div class="text-center group">
+          <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-s-3 border border-s-b flex items-center justify-center text-2xl group-hover:border-lime-500/30 transition-all">🪙</div>
+          <div class="text-[10px] mono text-lime-500/50 mb-1.5">01</div>
+          <h3 class="text-white font-semibold text-[15px] mb-1.5">Token Earns Fees</h3>
+          <p class="text-[13px] text-gray-500 leading-relaxed">Our token on Pumpfun generates creator fees from every trade.</p>
+        </div>
+        <div class="text-center group">
+          <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-s-3 border border-s-b flex items-center justify-center text-2xl group-hover:border-lime-500/30 transition-all">🏦</div>
+          <div class="text-[10px] mono text-lime-500/50 mb-1.5">02</div>
+          <h3 class="text-white font-semibold text-[15px] mb-1.5">Fees Hit Treasury</h3>
+          <p class="text-[13px] text-gray-500 leading-relaxed">SOL fees flow into the agent's treasury with strict spending limits.</p>
+        </div>
+        <div class="text-center group">
+          <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-s-3 border border-s-b flex items-center justify-center text-2xl group-hover:border-lime-500/30 transition-all">🧠</div>
+          <div class="text-[10px] mono text-lime-500/50 mb-1.5">03</div>
+          <h3 class="text-white font-semibold text-[15px] mb-1.5">AI Brainstorms</h3>
+          <p class="text-[13px] text-gray-500 leading-relaxed">Claude AI decides the most creative way to spend fees on advertising.</p>
+        </div>
+        <div class="text-center group">
+          <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-s-3 border border-s-b flex items-center justify-center text-2xl group-hover:border-lime-500/30 transition-all">🚀</div>
+          <div class="text-[10px] mono text-lime-500/50 mb-1.5">04</div>
+          <h3 class="text-white font-semibold text-[15px] mb-1.5">Executes & Learns</h3>
+          <p class="text-[13px] text-gray-500 leading-relaxed">Campaigns go live. AI tracks engagement and loops with new fees.</p>
+        </div>
+      </div>
+      <div class="text-center mt-10">
+        <div class="inline-flex items-center gap-2 bg-s-2 border border-s-b rounded-full px-5 py-2">
+          <span class="text-lime-400 text-sm">↻</span>
+          <span class="text-[11px] text-gray-500 mono">Fully autonomous — runs 24/7</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CAPABILITIES ===== -->
+  <section class="py-24 border-t border-s-b">
+    <div class="max-w-5xl mx-auto px-6">
+      <div class="text-center mb-14">
+        <p class="text-[11px] font-semibold text-lime-400 tracking-[.2em] uppercase mb-3">Capabilities</p>
+        <h2 class="text-3xl font-bold text-white">What the AI can do</h2>
+      </div>
+      <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+        <div class="card p-5 hover:border-blue-500/20 transition-all"><div class="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center mb-3"><svg class="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></div><h3 class="text-white font-semibold text-sm mb-1">Twitter/X Posts</h3><p class="text-[13px] text-gray-500 leading-relaxed">Viral tweets, threads, hot takes, alpha calls — AI-generated content for crypto Twitter.</p></div>
+        <div class="card p-5 hover:border-purple-500/20 transition-all"><div class="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center mb-3"><svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div><h3 class="text-white font-semibold text-sm mb-1">SOL Airdrops</h3><p class="text-[13px] text-gray-500 leading-relaxed">Drop SOL to active Pumpfun traders to grab attention and build community.</p></div>
+        <div class="card p-5 hover:border-yellow-500/20 transition-all"><div class="w-9 h-9 rounded-lg bg-yellow-500/10 flex items-center justify-center mb-3"><svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/></svg></div><h3 class="text-white font-semibold text-sm mb-1">On-Chain Memos</h3><p class="text-[13px] text-gray-500 leading-relaxed">Permanent messages on Solana. Visible to everyone. Impossible to ignore.</p></div>
+        <div class="card p-5 hover:border-pink-500/20 transition-all"><div class="w-9 h-9 rounded-lg bg-pink-500/10 flex items-center justify-center mb-3"><svg class="w-4 h-4 text-pink-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg></div><h3 class="text-white font-semibold text-sm mb-1">Community Tips</h3><p class="text-[13px] text-gray-500 leading-relaxed">Tip active community members in SOL to build real loyalty.</p></div>
+        <div class="card p-5 hover:border-orange-500/20 transition-all"><div class="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center mb-3"><svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg></div><h3 class="text-white font-semibold text-sm mb-1">Twitter Ad Boost</h3><p class="text-[13px] text-gray-500 leading-relaxed">Promotes top-performing tweets with paid Twitter Ads for maximum reach.</p></div>
+        <div class="card p-5 hover:border-teal-500/20 transition-all"><div class="w-9 h-9 rounded-lg bg-teal-500/10 flex items-center justify-center mb-3"><svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div><h3 class="text-white font-semibold text-sm mb-1">KOL Payments</h3><p class="text-[13px] text-gray-500 leading-relaxed">Pays crypto influencers in SOL with on-chain verifiable briefs.</p></div>
+        <div class="card p-5 hover:border-rose-500/20 transition-all"><div class="w-9 h-9 rounded-lg bg-rose-500/10 flex items-center justify-center mb-3"><svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg></div><h3 class="text-white font-semibold text-sm mb-1">Display Ad Buying</h3><p class="text-[13px] text-gray-500 leading-relaxed">Buys banner ads on crypto ad networks for sustained visibility.</p></div>
+        <div class="card p-5 hover:border-lime-500/20 transition-all"><div class="w-9 h-9 rounded-lg bg-lime-500/10 flex items-center justify-center mb-3"><svg class="w-4 h-4 text-lime-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg></div><h3 class="text-white font-semibold text-sm mb-1">Creative Stunts</h3><p class="text-[13px] text-gray-500 leading-relaxed">The AI invents new strategies. Not limited to a playbook.</p></div>
+        <div class="card p-5 hover:border-cyan-500/20 transition-all"><div class="w-9 h-9 rounded-lg bg-cyan-500/10 flex items-center justify-center mb-3"><svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg></div><h3 class="text-white font-semibold text-sm mb-1">Self-Improving</h3><p class="text-[13px] text-gray-500 leading-relaxed">Tracks engagement on every campaign. Learns what works.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== DASHBOARD ===== -->
+  <section id="dashboard" class="py-24 border-t border-s-b">
+    <div class="max-w-7xl mx-auto px-6">
+      <div class="flex items-end justify-between mb-8">
+        <div>
+          <p class="text-[11px] font-semibold text-lime-400 tracking-[.2em] uppercase mb-2">Transparent & Live</p>
+          <h2 class="text-3xl font-bold text-white">Dashboard</h2>
+        </div>
+        <div class="flex items-center gap-2"><div class="w-1.5 h-1.5 rounded-full bg-lime-400 pulse-dot"></div><span class="text-[11px] mono text-gray-500">Auto-refreshes every 10s</span></div>
+      </div>
+
+      <!-- AI BRAIN PANEL -->
+      <div class="card p-5 mb-3 relative overflow-hidden">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-8 h-8 rounded-xl bg-lime-500/10 border border-lime-500/20 flex items-center justify-center">
+            <span class="text-base">🧠</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-[13px] font-semibold text-white">AI Brain</span>
+              <span id="brain-state-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-lime-500/10 text-lime-400 mono">idle</span>
+              <span id="brain-cycle" class="text-[10px] mono text-gray-600">Cycle #--</span>
+            </div>
+          </div>
+        </div>
+        <div id="brain-terminal" class="card-inner p-4 mono text-[12px] text-gray-400 min-h-[60px] max-h-[120px] overflow-y-auto leading-relaxed">
+          <span class="text-gray-600">Initializing brain...</span>
+        </div>
+      </div>
+
+      <!-- STAT CARDS -->
+      <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-3">
+        <div class="lg:col-span-2 card p-5 shimmer relative overflow-hidden">
+          <div class="relative z-10">
+            <div class="flex items-center gap-2 mb-3"><div class="w-7 h-7 rounded-lg bg-lime-500/10 flex items-center justify-center"><svg class="w-3.5 h-3.5 text-lime-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/></svg></div><span class="text-[11px] text-gray-500 uppercase tracking-wider font-medium">Treasury Balance</span></div>
+            <p id="s-balance" class="text-3xl font-bold text-white mono">--</p>
+            <p class="text-[11px] text-gray-600 mt-1">SOL available to spend</p>
+          </div>
+        </div>
+        <div class="card p-5">
+          <div class="flex items-center gap-2 mb-3"><div class="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center"><svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg></div><span class="text-[11px] text-gray-500 uppercase tracking-wider font-medium">Earned</span></div>
+          <p id="s-earned" class="text-2xl font-bold text-emerald-400 mono">--</p>
+          <p class="text-[11px] text-gray-600 mt-1">total fees</p>
+        </div>
+        <div class="card p-5">
+          <div class="flex items-center gap-2 mb-3"><div class="w-7 h-7 rounded-lg bg-orange-500/10 flex items-center justify-center"><svg class="w-3.5 h-3.5 text-orange-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg></div><span class="text-[11px] text-gray-500 uppercase tracking-wider font-medium">Spent</span></div>
+          <p id="s-spent" class="text-2xl font-bold text-orange-400 mono">--</p>
+          <p class="text-[11px] text-gray-600 mt-1">on campaigns</p>
+        </div>
+        <div class="card p-5">
+          <div class="flex items-center gap-2 mb-3"><div class="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center"><svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></div><span class="text-[11px] text-gray-500 uppercase tracking-wider font-medium">Impressions</span></div>
+          <p id="s-impressions" class="text-2xl font-bold text-blue-400 mono">--</p>
+          <p class="text-[11px] text-gray-600 mt-1">total reach</p>
+        </div>
+        <div class="card p-5">
+          <div class="flex items-center gap-2 mb-3"><div class="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center"><svg class="w-3.5 h-3.5 text-violet-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div><span class="text-[11px] text-gray-500 uppercase tracking-wider font-medium">Campaigns</span></div>
+          <p id="s-campaigns" class="text-2xl font-bold text-violet-400 mono">--</p>
+          <p id="s-success" class="text-[11px] text-gray-600 mt-1">--</p>
+        </div>
+      </div>
+
+      <!-- CHARTS ROW -->
+      <div class="grid lg:grid-cols-3 gap-3 mb-3">
+        <!-- Treasury + Flow chart -->
+        <div class="lg:col-span-2 card p-5">
+          <div class="flex items-center justify-between mb-4">
+            <span class="text-[11px] text-gray-500 uppercase tracking-wider font-medium">Treasury Balance + Flow</span>
+            <span class="text-[11px] mono text-gray-600">Last 7 days</span>
+          </div>
+          <div class="h-52"><canvas id="treasuryChart"></canvas></div>
+        </div>
+        <!-- Donut -->
+        <div class="card p-5">
+          <span class="text-[11px] text-gray-500 uppercase tracking-wider font-medium">Campaign Types</span>
+          <div class="flex items-center justify-center mt-4 mb-4">
+            <div class="w-40 h-40 relative">
+              <canvas id="donutChart"></canvas>
+              <div class="absolute inset-0 flex flex-col items-center justify-center"><span id="donut-total" class="text-lg font-bold text-white mono">--</span><span class="text-[10px] text-gray-500">campaigns</span></div>
+            </div>
+          </div>
+          <div id="donut-legend" class="space-y-1.5"></div>
+        </div>
+      </div>
+
+      <!-- LEADERBOARD + ENGAGEMENT + DAILY -->
+      <div class="grid lg:grid-cols-3 gap-3 mb-3">
+        <!-- Top Campaigns Leaderboard -->
+        <div class="card p-5">
+          <div class="flex items-center gap-2 mb-4">
+            <span class="text-[11px] text-gray-500 uppercase tracking-wider font-medium">Top Campaigns</span>
+            <span class="text-[10px] text-yellow-500/50">by reach</span>
+          </div>
+          <div id="leaderboard" class="space-y-2">
+            <p class="text-gray-600 text-[12px]">Loading...</p>
+          </div>
+        </div>
+
+        <!-- Daily Chart -->
+        <div class="card p-5">
+          <span class="text-[11px] text-gray-500 uppercase tracking-wider font-medium mb-4 block">Daily Activity</span>
+          <div class="h-40"><canvas id="dailyChart"></canvas></div>
+        </div>
+
+        <!-- Engagement -->
+        <div class="card p-5">
+          <span class="text-[11px] text-gray-500 uppercase tracking-wider font-medium">Engagement</span>
+          <div class="mt-4 space-y-2.5">
+            <div class="card-inner p-3 flex items-center justify-between"><div class="flex items-center gap-2"><span class="text-red-400 text-sm">♥</span><span class="text-[12px] text-gray-400">Likes</span></div><span id="eng-likes" class="text-sm font-bold text-white mono">--</span></div>
+            <div class="card-inner p-3 flex items-center justify-between"><div class="flex items-center gap-2"><span class="text-green-400 text-sm">↻</span><span class="text-[12px] text-gray-400">Retweets</span></div><span id="eng-rts" class="text-sm font-bold text-white mono">--</span></div>
+            <div class="card-inner p-3 flex items-center justify-between"><div class="flex items-center gap-2"><span class="text-blue-400 text-sm">💬</span><span class="text-[12px] text-gray-400">Replies</span></div><span id="eng-replies" class="text-sm font-bold text-white mono">--</span></div>
+            <div class="card-inner p-3 flex items-center justify-between"><div class="flex items-center gap-2"><span class="text-purple-400 text-sm">👁</span><span class="text-[12px] text-gray-400">Views</span></div><span id="eng-views" class="text-sm font-bold text-white mono">--</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CAMPAIGN FEED -->
+      <div id="feed" class="card p-5">
+        <div class="flex items-center justify-between mb-5">
+          <div class="flex items-center gap-3"><span class="text-[11px] text-gray-500 uppercase tracking-wider font-medium">Campaign Feed</span><div class="flex items-center gap-1.5"><div class="w-1.5 h-1.5 rounded-full bg-lime-400 pulse-dot"></div><span class="text-[10px] text-lime-500/50 mono">LIVE</span></div></div>
+          <span id="feed-count" class="text-[11px] mono text-gray-600"></span>
+        </div>
+        <div id="campaign-feed" class="space-y-2">
+          <div class="text-center py-12 text-gray-600 text-sm">Loading campaigns...</div>
+        </div>
+      </div>
+
+      <!-- WALLET -->
+      <div class="mt-4 flex items-center justify-center gap-3">
+        <a id="wallet-link" href="#" target="_blank" class="flex items-center gap-2 bg-s-2 border border-s-b rounded-full px-4 py-2 hover:border-s-b2 transition-all">
+          <svg class="w-3.5 h-3.5 text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+          <span id="wallet-addr" class="text-[11px] mono text-gray-500"></span>
+          <span class="text-[9px] text-gray-600">Solscan</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="border-t border-s-b py-10">
+    <div class="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-lime-400 pulse-dot"></div><span class="font-bold text-white text-sm">PumpShill</span><span class="text-[12px] text-gray-600">Autonomous Pumpfun Advertiser</span></div>
+      <div class="flex items-center gap-4">
+        <a id="ft-twitter" href="#" target="_blank" class="text-[12px] text-gray-500 hover:text-white transition-colors flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          Twitter
+        </a>
+        <a id="ft-telegram" href="#" target="_blank" class="text-[12px] text-gray-500 hover:text-white transition-colors">Telegram</a>
+        <a id="ft-pumpfun" href="#" target="_blank" class="text-[12px] text-gray-500 hover:text-white transition-colors">Pumpfun</a>
+      </div>
+      <span class="text-[11px] text-gray-600 mono">Powered by Claude AI + Solana</span>
+    </div>
+  </footer>
+
+  <!-- ===== JAVASCRIPT ===== -->
+  <script>
+    const CFG = {
+      tweet:         {label:'Tweet',  color:'#3b82f6',dot:'bg-blue-400',  text:'text-blue-400'},
+      thread:        {label:'Thread', color:'#6366f1',dot:'bg-indigo-400',text:'text-indigo-400'},
+      airdrop:       {label:'Airdrop',color:'#a855f7',dot:'bg-purple-400',text:'text-purple-400'},
+      memo_broadcast:{label:'Memo',   color:'#eab308',dot:'bg-yellow-400',text:'text-yellow-400'},
+      tip:           {label:'Tip',    color:'#ec4899',dot:'bg-pink-400',  text:'text-pink-400'},
+      twitter_boost: {label:'Boost',  color:'#f97316',dot:'bg-orange-400',text:'text-orange-400'},
+      kol_payment:   {label:'KOL',    color:'#14b8a6',dot:'bg-teal-400',  text:'text-teal-400'},
+      ad_buy:        {label:'Ad Buy', color:'#f43f5e',dot:'bg-rose-400',  text:'text-rose-400'},
+      custom:        {label:'Custom', color:'#6b7280',dot:'bg-gray-400',  text:'text-gray-400'},
+    };
+    const BRAIN_COLORS = {idle:'bg-gray-500/10 text-gray-400',collecting:'bg-blue-500/10 text-blue-400',thinking:'bg-yellow-500/10 text-yellow-400',proposed:'bg-lime-500/10 text-lime-400',executing:'bg-orange-500/10 text-orange-400',done:'bg-emerald-500/10 text-emerald-400'};
+
+    const s = n=>Number(n).toFixed(4), n = v=>Number(v).toLocaleString(), sh = (t,l=140)=>t.length>l?t.slice(0,l)+'...':t;
+    function ago(ts){const d=Date.now()-ts;if(d<60000)return'just now';if(d<3600000)return Math.floor(d/60000)+'m ago';if(d<86400000)return Math.floor(d/3600000)+'h ago';return Math.floor(d/86400000)+'d ago'}
+
+    let siteConfig = {};
+
+    // Copy CA
+    window.copyCA = async function(){
+      await navigator.clipboard.writeText(siteConfig.contractAddress||'');
+      document.getElementById('copy-icon').classList.add('hidden');
+      document.getElementById('check-icon').classList.remove('hidden');
+      setTimeout(()=>{document.getElementById('copy-icon').classList.remove('hidden');document.getElementById('check-icon').classList.add('hidden')},2000);
+    };
+
+    // Twitter link helper
+    function tweetUrl(id){return`https://x.com/i/status/${id}`}
+    function solscanTx(sig){return`https://solscan.io/tx/${sig}`}
+    function solscanAddr(a){return`https://solscan.io/account/${a}`}
+
+    // --- Charts ---
+    let tChart,dChart,dailyC;
+
+    function initTreasuryChart(history,flow){
+      const ctx=document.getElementById('treasuryChart').getContext('2d');
+      const labels=history.map(h=>new Date(h.timestamp).toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+      if(tChart)tChart.destroy();
+      tChart=new Chart(ctx,{
+        type:'line',
+        data:{labels,datasets:[
+          {label:'Balance',data:history.map(h=>h.balance),borderColor:'#5fcb87',backgroundColor:c=>{const g=c.chart.ctx.createLinearGradient(0,0,0,220);g.addColorStop(0,'rgba(95,203,135,.12)');g.addColorStop(1,'rgba(95,203,135,0)');return g},fill:true,tension:.4,borderWidth:2,pointRadius:0,pointHoverRadius:5,pointHoverBackgroundColor:'#5fcb87',order:1},
+          {label:'Income',data:flow.map(f=>f.income),type:'bar',backgroundColor:'rgba(16,185,129,.35)',borderRadius:4,barPercentage:.4,order:2},
+          {label:'Spent',data:flow.map(f=>-f.spent),type:'bar',backgroundColor:'rgba(239,68,68,.35)',borderRadius:4,barPercentage:.4,order:2},
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:true,position:'top',align:'end',labels:{boxWidth:8,boxHeight:8,padding:12,font:{family:'JetBrains Mono',size:10},color:'#555'}},
+            tooltip:{backgroundColor:'#181828',borderColor:'#2a2a44',borderWidth:1,titleFont:{family:'JetBrains Mono',size:10},bodyFont:{family:'JetBrains Mono',size:11},titleColor:'#666',bodyColor:'#ccc',padding:10,displayColors:true,boxWidth:8,boxHeight:8,callbacks:{label:c=>c.dataset.label+': '+(c.parsed.y>=0?'+':'')+c.parsed.y.toFixed(4)+' SOL'}}},
+          scales:{x:{grid:{color:'rgba(255,255,255,.03)',drawBorder:false},ticks:{font:{family:'JetBrains Mono',size:10},color:'#444'},border:{display:false}},y:{grid:{color:'rgba(255,255,255,.03)',drawBorder:false},ticks:{font:{family:'JetBrains Mono',size:10},color:'#444',callback:v=>v.toFixed(2)},border:{display:false}}},
+          interaction:{intersect:false,mode:'index'}}
+      });
+    }
+
+    function initDonut(byAction){
+      const ctx=document.getElementById('donutChart').getContext('2d');
+      const entries=Object.entries(byAction);
+      if(dChart)dChart.destroy();
+      dChart=new Chart(ctx,{type:'doughnut',data:{labels:entries.map(([a])=>(CFG[a]||CFG.custom).label),datasets:[{data:entries.map(([,v])=>v.count),backgroundColor:entries.map(([a])=>(CFG[a]||CFG.custom).color),borderWidth:0,hoverOffset:4}]},options:{responsive:true,maintainAspectRatio:false,cutout:'72%',plugins:{legend:{display:false},tooltip:{backgroundColor:'#181828',borderColor:'#2a2a44',borderWidth:1,bodyFont:{family:'JetBrains Mono',size:11},bodyColor:'#ccc',padding:8,displayColors:true,boxWidth:8,boxHeight:8,boxPadding:4}}}});
+      document.getElementById('donut-legend').innerHTML=entries.map(([a,i])=>{const c=CFG[a]||CFG.custom;return`<div class="flex items-center justify-between text-[12px]"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full ${c.dot}"></span><span class="text-gray-400">${c.label}</span></div><span class="mono text-gray-500">${i.count}</span></div>`}).join('');
+    }
+
+    function initDaily(byDay){
+      const ctx=document.getElementById('dailyChart').getContext('2d');
+      const entries=Object.entries(byDay).slice(-10);
+      if(dailyC)dailyC.destroy();
+      dailyC=new Chart(ctx,{type:'bar',data:{labels:entries.map(([d])=>new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'})),datasets:[{data:entries.map(([,v])=>v.count),backgroundColor:'rgba(95,203,135,.3)',hoverBackgroundColor:'rgba(95,203,135,.5)',borderRadius:6,borderSkipped:false,barPercentage:.6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'#181828',borderColor:'#2a2a44',borderWidth:1,bodyFont:{family:'JetBrains Mono',size:11},bodyColor:'#5fcb87',titleFont:{family:'JetBrains Mono',size:10},titleColor:'#666',padding:8,displayColors:false,callbacks:{label:c=>c.parsed.y+' campaigns'}}},scales:{x:{grid:{display:false},ticks:{font:{family:'JetBrains Mono',size:9},color:'#444'},border:{display:false}},y:{grid:{color:'rgba(255,255,255,.03)',drawBorder:false},ticks:{font:{family:'JetBrains Mono',size:10},color:'#444',stepSize:1},border:{display:false}}}}});
+    }
+
+    // --- Renders ---
+    function renderStats(stats,spending){
+      document.getElementById('s-balance').textContent=s(stats.treasury.totalBalance);
+      document.getElementById('s-earned').textContent=s(stats.treasury.totalEarned);
+      document.getElementById('s-spent').textContent=s(stats.treasury.totalSpent);
+      document.getElementById('s-impressions').textContent=n(stats.totalImpressions);
+      document.getElementById('s-campaigns').textContent=stats.campaigns.total;
+      document.getElementById('s-success').textContent=(spending.successRate*100).toFixed(0)+'% success rate';
+      document.getElementById('donut-total').textContent=stats.campaigns.total;
+      document.getElementById('wallet-addr').textContent=stats.wallet;
+      document.getElementById('wallet-link').href=solscanAddr(stats.wallet);
+    }
+
+    function renderEngagement(campaigns){
+      let likes=0,rts=0,replies=0,views=0;
+      for(const c of campaigns){if(!c.metrics)continue;likes+=c.metrics.likes||0;rts+=c.metrics.retweets||0;replies+=c.metrics.replies||0;views+=c.metrics.impressions||0}
+      document.getElementById('eng-likes').textContent=n(likes);
+      document.getElementById('eng-rts').textContent=n(rts);
+      document.getElementById('eng-replies').textContent=n(replies);
+      document.getElementById('eng-views').textContent=n(views);
+    }
+
+    function renderLeaderboard(top){
+      const el=document.getElementById('leaderboard');
+      if(!top.length){el.innerHTML='<p class="text-gray-600 text-[12px]">No data yet</p>';return}
+      el.innerHTML=top.map((c,i)=>{
+        const cfg=CFG[c.action]||CFG.custom;
+        const content=c.action==='thread'?c.content.split('|||')[0]:c.content;
+        const imp=c.metrics?.impressions||0;
+        const lk=c.metrics?.likes||0;
+        const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+        const link=c.tweetId?`<a href="${tweetUrl(c.tweetId)}" target="_blank" class="text-blue-400/40 hover:text-blue-400 transition-colors ml-1"><svg class="w-3 h-3 inline" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>`:'';
+        return`<div class="card-inner p-3">
+          <div class="flex items-start gap-2">
+            <span class="text-sm shrink-0">${medal||'#'+(i+1)}</span>
+            <div class="flex-1 min-w-0">
+              <p class="text-[12px] text-gray-300 leading-snug">${sh(content,80)}${link}</p>
+              <div class="flex items-center gap-3 mt-1 text-[10px] mono">
+                <span class="text-blue-400/60">${n(imp)} views</span>
+                <span class="text-red-400/60">${n(lk)} likes</span>
+              </div>
+            </div>
+          </div>
+        </div>`}).join('');
+    }
+
+    function renderTicker(campaigns){
+      const el=document.getElementById('ticker-content');
+      const items=campaigns.slice(0,8).map(c=>{
+        const cfg=CFG[c.action]||CFG.custom;
+        const icon=c.action==='tweet'||c.action==='thread'?'📝':c.action==='airdrop'?'🪂':c.action==='memo_broadcast'?'📡':c.action==='tip'?'💸':c.action==='twitter_boost'?'🚀':c.action==='kol_payment'?'🤝':c.action==='ad_buy'?'📺':'⚡';
+        return`<span class="inline-flex items-center gap-1.5 px-4">${icon} <span class="${cfg.text}">${cfg.label}</span> <span class="text-gray-500">${sh(c.content.split('|||')[0],50)}</span> <span class="text-gray-600">— ${ago(c.timestamp)}</span></span>`;
+      }).join('<span class="text-gray-700 px-2">|</span>');
+      el.innerHTML=items+items; // duplicate for seamless scroll
+    }
+
+    function renderBrain(brain){
+      const badge=document.getElementById('brain-state-badge');
+      const cycle=document.getElementById('brain-cycle');
+      const terminal=document.getElementById('brain-terminal');
+      const colors=BRAIN_COLORS[brain.state]||BRAIN_COLORS.idle;
+      badge.className=`text-[10px] px-2 py-0.5 rounded-full mono ${colors}`;
+      badge.textContent=brain.state;
+      cycle.textContent=`Cycle #${brain.cycle}`;
+      const prefix=brain.state==='thinking'?'> Thinking: ':brain.state==='proposed'?'> Proposal:\n':brain.state==='executing'?'> ':brain.state==='done'?'> ':'> ';
+      const msg=brain.message||'';
+      terminal.innerHTML=`<span class="text-gray-500">${prefix}</span><span class="${brain.state==='proposed'?'text-lime-400/80':'text-gray-300'}">${msg.replace(/\n/g,'<br>')}</span>${brain.state==='thinking'?'<span class="cursor-blink"></span>':''}`;
+      terminal.scrollTop=terminal.scrollHeight;
+    }
+
+    function renderFeed(data){
+      const el=document.getElementById('campaign-feed');
+      document.getElementById('feed-count').textContent=data.total+' total';
+      if(!data.campaigns.length){el.innerHTML='<div class="text-center py-12 text-gray-600 text-sm">No campaigns yet</div>';return}
+      el.innerHTML=data.campaigns.map(c=>{
+        const cfg=CFG[c.action]||CFG.custom;
+        const sc=c.status==='executed'?'bg-lime-500/10 text-lime-400':c.status==='failed'?'bg-red-500/10 text-red-400':'bg-yellow-500/10 text-yellow-400';
+        const content=c.action==='thread'?c.content.split('|||')[0].trim():c.content;
+
+        // Verification links
+        let links='';
+        if(c.tweetId) links+=`<a href="${tweetUrl(c.tweetId)}" target="_blank" class="inline-flex items-center gap-1 text-[10px] text-blue-400/50 hover:text-blue-400 transition-colors mono"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>view</a> `;
+        if(c.metrics?.txSignature) links+=`<a href="${solscanTx(c.metrics.txSignature)}" target="_blank" class="inline-flex items-center gap-1 text-[10px] text-purple-400/50 hover:text-purple-400 transition-colors mono"><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>solscan</a>`;
+
+        let metricHtml='';
+        if(c.metrics){
+          const p=[];
+          if(c.metrics.impressions)p.push(`<span class="text-blue-400/60">${n(c.metrics.impressions)} views</span>`);
+          if(c.metrics.paidImpressions)p.push(`<span class="text-orange-400/60">${n(c.metrics.paidImpressions)} paid views</span>`);
+          if(c.metrics.paidClicks)p.push(`<span class="text-rose-400/60">${n(c.metrics.paidClicks)} clicks</span>`);
+          if(c.metrics.likes)p.push(`<span class="text-red-400/60">${n(c.metrics.likes)} likes</span>`);
+          if(c.metrics.retweets)p.push(`<span class="text-green-400/60">${n(c.metrics.retweets)} RTs</span>`);
+          if(c.metrics.adSpendUsd)p.push(`<span class="text-yellow-400/60">$${c.metrics.adSpendUsd.toFixed(2)} spent</span>`);
+          if(c.metrics.estimatedReach)p.push(`<span class="text-teal-400/60">~${n(c.metrics.estimatedReach)} reach</span>`);
+          if(p.length)metricHtml=`<div class="flex flex-wrap items-center gap-3 mt-2 text-[11px] mono">${p.join('')}</div>`;
+        }
+
+        return`<div class="feed-item card-inner p-4 cursor-default">
+          <div class="flex items-start gap-3">
+            <div class="flex flex-col items-center gap-1 pt-0.5 shrink-0 w-12">
+              <span class="w-2.5 h-2.5 rounded-full ${cfg.dot}"></span>
+              <span class="text-[10px] text-gray-600 mono">${ago(c.timestamp)}</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[12px] font-medium ${cfg.text}">${cfg.label}</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded-full ${sc}">${c.status}</span>
+                ${c.action==='thread'?'<span class="text-[10px] text-gray-600 mono">'+c.content.split('|||').length+' tweets</span>':''}
+                ${links}
+              </div>
+              <p class="text-[13px] text-gray-300 leading-relaxed">${sh(content)}</p>
+              ${metricHtml}
+              <p class="text-[11px] text-gray-600 mt-1.5 italic">${sh(c.reasoning,100)}</p>
+            </div>
+            <div class="text-right shrink-0">
+              <span class="text-[12px] mono ${c.cost>0?'text-orange-400':'text-gray-600'}">${c.cost>0?s(c.cost)+' SOL':'Free'}</span>
+            </div>
+          </div>
+        </div>`}).join('');
+    }
+
+    // --- Config + links ---
+    async function loadConfig(){
+      try{
+        const cfg=await fetch('/api/config').then(r=>r.json());
+        siteConfig=cfg;
+        document.getElementById('hero-ca').textContent=cfg.contractAddress;
+        document.getElementById('hero-buy').href=cfg.pumpfunUrl;
+        document.getElementById('nav-buy').href=cfg.pumpfunUrl;
+        document.getElementById('hero-twitter').href=`https://x.com/${cfg.twitterHandle}`;
+        document.getElementById('nav-twitter').href=`https://x.com/${cfg.twitterHandle}`;
+        document.getElementById('nav-telegram').href=`https://t.me/${cfg.telegramChannel}`;
+        document.getElementById('ft-twitter').href=`https://x.com/${cfg.twitterHandle}`;
+        document.getElementById('ft-telegram').href=`https://t.me/${cfg.telegramChannel}`;
+        document.getElementById('ft-pumpfun').href=cfg.pumpfunUrl;
+      }catch(e){console.error('Config load error',e)}
+    }
+
+    // --- Main loop ---
+    let first=true;
+    async function load(){
+      try{
+        const [stats,spending,campaigns,leaderboard]=await Promise.all([
+          fetch('/api/stats').then(r=>r.json()),
+          fetch('/api/spending').then(r=>r.json()),
+          fetch('/api/campaigns?limit=20').then(r=>r.json()),
+          fetch('/api/leaderboard').then(r=>r.json()),
+        ]);
+        renderStats(stats,spending);
+        renderEngagement(campaigns.campaigns);
+        renderFeed(campaigns);
+        renderLeaderboard(leaderboard.top);
+        if(first){
+          renderTicker(campaigns.campaigns);
+          initTreasuryChart(stats.treasuryHistory||[],stats.treasuryFlow||[]);
+          initDonut(spending.byAction);
+          initDaily(spending.byDay);
+          first=false;
+        }
+      }catch(e){console.error('Load error:',e)}
+    }
+
+    // Brain polling (faster)
+    async function pollBrain(){
+      try{const b=await fetch('/api/brain').then(r=>r.json());renderBrain(b)}catch(e){}
+    }
+
+    loadConfig();
+    load();
+    pollBrain();
+    setInterval(load,10000);
+    setInterval(pollBrain,4000);
+  </script>
+</body>
+</html>
