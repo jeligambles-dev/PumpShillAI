@@ -250,6 +250,7 @@ const mockAlerts = [
     reason: "Viral potential — over 10K impressions organically",
     tweetUrl: "https://x.com/PumpShillAI/status/1893742916897234944",
     timestamp: START - 3600000, dismissed: false,
+    allocatedSol: 0.0386, estimatedReach: 1930,
   },
   {
     id: "boost_c_002", campaignId: "c_002", tweetId: "1893842156839201792",
@@ -258,6 +259,7 @@ const mockAlerts = [
     reason: "Strong performer — 5K+ impressions, worth amplifying",
     tweetUrl: "https://x.com/PumpShillAI/status/1893842156839201792",
     timestamp: START - 7200000, dismissed: false,
+    allocatedSol: 0.0241, estimatedReach: 1205,
   },
 ];
 let dismissedAlerts = new Set<string>();

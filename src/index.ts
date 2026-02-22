@@ -110,7 +110,7 @@ async function main() {
 
       // 4. Evaluate campaigns for boost alerts
       const twitterHandle = process.env.TWITTER_HANDLE || "PumpShillAI";
-      alertSystem.evaluateCampaigns(tracker.getAllCampaigns(), twitterHandle);
+      alertSystem.evaluateCampaigns(tracker.getAllCampaigns(), twitterHandle, treasury.availableBalance);
       const alertStats = alertSystem.getStats();
       if (alertStats.active > 0) {
         logger.info(

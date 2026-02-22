@@ -14,6 +14,8 @@ export interface BoostAlert {
   tweetUrl: string;
   timestamp: number;
   dismissed: boolean;
+  allocatedSol: number;
+  estimatedReach: number;
 }
 
 // Thresholds for boost recommendations
@@ -31,7 +33,7 @@ export class AlertSystem {
    * Scan campaigns for tweets worth boosting.
    * Call this after metrics are updated each cycle.
    */
-  evaluateCampaigns(campaigns: Campaign[], twitterHandle: string): void {
+  evaluateCampaigns(campaigns: Campaign[], twitterHandle: string, treasuryBalance: number = 0): void {
     for (const c of campaigns) {
       // Only look at executed tweets/threads with metrics
       if (!c.tweetId || c.status !== "executed") continue;
@@ -64,6 +66,16 @@ export class AlertSystem {
       else if (score >= 5000) reason = "Top performer by combined score";
       else reason = "Above-average engagement — consider boosting";
 
+      // Allocate SOL budget based on score tier (% of treasury)
+      let allocPct = 0;
+      if (score >= 20000) allocPct = 0.08;       // Top tier: 8% of treasury
+      else if (score >= 10000) allocPct = 0.05;   // High: 5%
+      else if (score >= 5000) allocPct = 0.03;    // Medium: 3%
+      else allocPct = 0.02;                       // Base: 2%
+
+      const allocatedSol = Math.round(treasuryBalance * allocPct * 10000) / 10000;
+      const estimatedReach = Math.round(allocatedSol * 50000); // ~50K impressions per SOL
+
       const alert: BoostAlert = {
         id: alertId,
         campaignId: c.id,
@@ -77,6 +89,8 @@ export class AlertSystem {
         tweetUrl: `https://x.com/${twitterHandle}/status/${c.tweetId}`,
         timestamp: Date.now(),
         dismissed: false,
+        allocatedSol,
+        estimatedReach,
       };
 
       this.alerts.push(alert);
