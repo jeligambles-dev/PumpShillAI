@@ -88,7 +88,7 @@ export async function searchRecentTweets(
   try {
     const tw = getClient();
     const result = await tw.v2.search(query, {
-      max_results: Math.min(maxResults, 10) as 10,
+      max_results: Math.max(Math.min(maxResults, 100), 10) as 10,
       "tweet.fields": ["public_metrics", "author_id", "conversation_id"],
       "user.fields": ["username"],
       expansions: ["author_id"],
