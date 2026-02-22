@@ -3,15 +3,19 @@ import path from "path";
 import { Treasury } from "./treasury";
 import { Tracker } from "./tracker";
 import { FeeCollector } from "./fee-collector";
+import { AlertSystem } from "./alerts";
 import { logger } from "./utils/logger";
 
 export function createServer(deps: {
   treasury: Treasury;
   tracker: Tracker;
   feeCollector: FeeCollector;
+  alertSystem: AlertSystem;
 }) {
   const app = express();
-  const { treasury, tracker, feeCollector } = deps;
+  const { treasury, tracker, feeCollector, alertSystem } = deps;
+
+  app.use(express.json());
 
   // Serve static dashboard
   app.use(express.static(path.join(__dirname, "dashboard")));
@@ -112,6 +116,26 @@ export function createServer(deps: {
     });
   });
 
+  // --- Admin / Alert Routes ---
+
+  app.get("/api/alerts", (_req, res) => {
+    const active = alertSystem.getActiveAlerts();
+    const stats = alertSystem.getStats();
+    res.json({ alerts: active, stats });
+  });
+
+  app.get("/api/alerts/all", (_req, res) => {
+    const all = alertSystem.getAllAlerts();
+    const stats = alertSystem.getStats();
+    res.json({ alerts: all, stats });
+  });
+
+  app.post("/api/alerts/:id/dismiss", (_req, res) => {
+    const ok = alertSystem.dismissAlert(_req.params.id);
+    if (!ok) return res.status(404).json({ error: "Alert not found" });
+    res.json({ success: true });
+  });
+
   return app;
 }
 
@@ -120,6 +144,7 @@ export function startServer(
     treasury: Treasury;
     tracker: Tracker;
     feeCollector: FeeCollector;
+    alertSystem: AlertSystem;
   },
   port: number = 3000
 ) {

@@ -6,6 +6,7 @@ import { Tracker } from "./tracker";
 import { executeCampaign } from "./executor";
 import { getTweetMetrics } from "./executor/twitter";
 import { startServer } from "./server";
+import { AlertSystem } from "./alerts";
 import { logger } from "./utils/logger";
 
 async function sleep(ms: number): Promise<void> {
@@ -20,13 +21,14 @@ async function main() {
   const treasury = new Treasury();
   const brain = new Brain();
   const tracker = new Tracker();
+  const alertSystem = new AlertSystem();
 
   // Initialize fee collector with current balance
   await feeCollector.initialize();
 
   // Start dashboard server
   const port = Number(process.env.DASHBOARD_PORT) || 3000;
-  startServer({ treasury, tracker, feeCollector }, port);
+  startServer({ treasury, tracker, feeCollector, alertSystem }, port);
 
   logger.info(
     {
@@ -104,6 +106,17 @@ async function main() {
             );
           }
         }
+      }
+
+      // 4. Evaluate campaigns for boost alerts
+      const twitterHandle = process.env.TWITTER_HANDLE || "PumpShillAI";
+      alertSystem.evaluateCampaigns(tracker.getAllCampaigns(), twitterHandle);
+      const alertStats = alertSystem.getStats();
+      if (alertStats.active > 0) {
+        logger.info(
+          { activeAlerts: alertStats.active, topScore: alertStats.topScore },
+          "Boost alerts active — check admin panel"
+        );
       }
     } catch (err) {
       logger.error({ err }, "Error in main loop cycle");

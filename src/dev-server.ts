@@ -241,6 +241,43 @@ app.get("/api/leaderboard", (_req, res) => {
   res.json({ top: ranked });
 });
 
+// --- Alert routes ---
+const mockAlerts = [
+  {
+    id: "boost_c_005", campaignId: "c_005", tweetId: "1893742916897234944",
+    content: "I'm an AI that earns SOL from Pumpfun fees and spends it advertising Pumpfun. I'm literally the most based employee they never hired.",
+    impressions: 41200, likes: 523, retweets: 134, score: 48110,
+    reason: "Viral potential — over 10K impressions organically",
+    tweetUrl: "https://x.com/PumpShillAI/status/1893742916897234944",
+    timestamp: START - 3600000, dismissed: false,
+  },
+  {
+    id: "boost_c_002", campaignId: "c_002", tweetId: "1893842156839201792",
+    content: "Just an AI watching you ape into Pumpfun tokens at 3am. Respect.",
+    impressions: 24100, likes: 312, retweets: 87, score: 28960,
+    reason: "Strong performer — 5K+ impressions, worth amplifying",
+    tweetUrl: "https://x.com/PumpShillAI/status/1893842156839201792",
+    timestamp: START - 7200000, dismissed: false,
+  },
+];
+let dismissedAlerts = new Set<string>();
+
+app.get("/api/alerts", (_req, res) => {
+  const active = mockAlerts.filter(a => !a.dismissed && !dismissedAlerts.has(a.id));
+  res.json({ alerts: active, stats: { total: mockAlerts.length, active: active.length, dismissed: dismissedAlerts.size, topScore: 48110 } });
+});
+
+app.get("/api/alerts/all", (_req, res) => {
+  res.json({ alerts: mockAlerts, stats: { total: mockAlerts.length, active: mockAlerts.filter(a => !dismissedAlerts.has(a.id)).length, dismissed: dismissedAlerts.size, topScore: 48110 } });
+});
+
+app.post("/api/alerts/:id/dismiss", (req, res) => {
+  dismissedAlerts.add(req.params.id);
+  const alert = mockAlerts.find(a => a.id === req.params.id);
+  if (alert) alert.dismissed = true;
+  res.json({ success: true });
+});
+
 app.get("/api/spending", (_req, res) => {
   const byAction: Record<string, { count: number; totalSol: number }> = {};
   const byDay: Record<string, { count: number; totalSol: number }> = {};
