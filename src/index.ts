@@ -6,7 +6,7 @@ import { Tracker } from "./tracker";
 import { executeCampaign } from "./executor";
 import { getTweetMetrics, postTweet, searchRecentTweets } from "./executor/twitter";
 import { getCastMetrics } from "./executor/farcaster";
-import { startServer } from "./server";
+import { startServer, updateBrainState } from "./server";
 import { AlertSystem } from "./alerts";
 import { MentionHandler } from "./mentions";
 import { ShillScanner } from "./shill-scanner";
@@ -58,6 +58,7 @@ async function main() {
   while (true) {
     cycleCount++;
     logger.info({ cycle: cycleCount }, "--- New cycle ---");
+    updateBrainState("collecting", cycleCount, "Checking wallet for new fees...");
 
     try {
       // 1. Check for new fees
@@ -105,6 +106,8 @@ async function main() {
           : "Treasury low — free actions only (tweets/threads)"
       );
 
+      updateBrainState("thinking", cycleCount, `Treasury: ${summary.available.toFixed(4)} SOL. Analyzing past campaigns and brainstorming next move...`);
+
       const proposal = await brain.brainstorm({
         treasuryBalance: treasury.availableBalance,
         maxBudget,
@@ -113,6 +116,8 @@ async function main() {
         trendingTweets,
         solPriceUsd: solPrice > 0 ? solPrice : undefined,
       });
+
+      updateBrainState("proposed", cycleCount, JSON.stringify({ action: proposal.action, content: proposal.content.slice(0, 120), budget: proposal.budget, reasoning: proposal.reasoning }, null, 2));
 
       logger.info(
         {
@@ -124,7 +129,12 @@ async function main() {
         "AI proposed campaign"
       );
 
+      updateBrainState("executing", cycleCount, `Executing ${proposal.action}...`);
+
       const campaign = await executeCampaign(proposal, treasury, tracker);
+
+      updateBrainState("done", cycleCount, `Campaign ${campaign.id} ${campaign.status}. ${campaign.status === 'executed' ? 'Waiting for engagement metrics...' : 'Failed — will retry next cycle.'}`);
+
       logger.info(
         { id: campaign.id, status: campaign.status },
         "Campaign result"
@@ -215,6 +225,7 @@ async function main() {
     }
 
     // Sleep until next cycle
+    updateBrainState("idle", cycleCount, "Waiting for next cycle...");
     logger.info(
       { nextCycleMs: config.agent.pollIntervalMs },
       "Sleeping until next cycle..."

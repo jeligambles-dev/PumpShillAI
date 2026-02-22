@@ -9,6 +9,25 @@ import { ShillScanner } from "./shill-scanner";
 import { loginHandler, authMiddleware } from "./middleware/auth";
 import { logger } from "./utils/logger";
 
+// Brain state tracking
+export interface BrainState {
+  state: "idle" | "collecting" | "thinking" | "proposed" | "executing" | "done";
+  cycle: number;
+  message: string;
+  timestamp: number;
+}
+
+let currentBrainState: BrainState = {
+  state: "idle",
+  cycle: 0,
+  message: "Starting up...",
+  timestamp: Date.now(),
+};
+
+export function updateBrainState(state: BrainState["state"], cycle: number, message: string): void {
+  currentBrainState = { state, cycle, message, timestamp: Date.now() };
+}
+
 export function createServer(deps: {
   treasury: Treasury;
   tracker: Tracker;
@@ -33,6 +52,10 @@ export function createServer(deps: {
   });
 
   // --- Public Routes (no auth) ---
+
+  app.get("/api/brain", (_req, res) => {
+    res.json(currentBrainState);
+  });
 
   app.get("/api/config", (_req, res) => {
     const contractAddress = process.env.CONTRACT_ADDRESS || "";
