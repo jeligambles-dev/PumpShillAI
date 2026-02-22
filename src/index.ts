@@ -154,12 +154,20 @@ async function main() {
         }
       }
 
-      // 5. Check and reply to mentions
+      // 5. Check and reply to mentions + reward cool replies
       const mentionResult = await mentionHandler.checkAndReply();
       if (mentionResult.replied > 0) {
         logger.info(
-          { checked: mentionResult.checked, replied: mentionResult.replied },
+          { checked: mentionResult.checked, replied: mentionResult.replied, rewarded: mentionResult.rewarded },
           "Replied to mentions"
+        );
+      }
+      // Process pending mention reward payments
+      const rewardResult = await mentionHandler.processRewardPayments(treasury, tracker);
+      if (rewardResult.paid > 0) {
+        logger.info(
+          { paid: rewardResult.paid, failed: rewardResult.failed },
+          "Mention rewards processed"
         );
       }
 
