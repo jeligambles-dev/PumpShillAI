@@ -705,12 +705,13 @@
       try{
         const stats=await fetch('/api/stats').then(r=>r.json());
         const leaderboard=await fetch('/api/leaderboard').then(r=>r.json());
+        const feed=await fetch('/api/feed').then(r=>r.json());
         renderStats(stats);
         renderEngagement(leaderboard.top);
         renderLeaderboard(leaderboard.top);
-        renderFeed(leaderboard.top);
+        renderFeed(feed.campaigns||[]);
         if(first){
-          renderTicker(leaderboard.top);
+          renderTicker(feed.campaigns||leaderboard.top);
           initTreasuryChart(stats.treasuryHistory||[],stats.treasuryFlow||[]);
           initDonut(stats.campaigns.byAction||{});
           first=false;

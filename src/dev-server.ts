@@ -256,6 +256,11 @@ app.get("/api/campaigns/:id", (_req, res) => {
   res.json(c);
 });
 
+app.get("/api/feed", (_req, res) => {
+  const limit = Math.min(Number(_req.query.limit) || 20, 50);
+  res.json({ total: mockCampaigns.length, campaigns: mockCampaigns.slice(-limit).reverse() });
+});
+
 app.get("/api/leaderboard", (_req, res) => {
   const ranked = [...mockCampaigns]
     .filter(c => c.metrics && ((c.metrics as any).impressions || (c.metrics as any).likes))

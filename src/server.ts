@@ -85,6 +85,15 @@ export function createServer(deps: {
     res.json({ top: ranked });
   });
 
+  app.get("/api/feed", (_req, res) => {
+    const limit = Math.min(Number(_req.query.limit) || 20, 50);
+    const campaigns = tracker.getAllCampaigns();
+    res.json({
+      total: campaigns.length,
+      campaigns: campaigns.slice(-limit).reverse(),
+    });
+  });
+
   app.get("/api/payments", (_req, res) => {
     // KOL payments from campaign tracker
     const kolCampaigns = tracker.getAllCampaigns()
